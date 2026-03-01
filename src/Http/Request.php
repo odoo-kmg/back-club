@@ -9,13 +9,15 @@ final class Request
   private string $path;
   private array $headers;
   private ?array $jsonBody;
+  private array $query;
 
-  private function __construct(string $method, string $path, array $headers, ?array $jsonBody)
+  private function __construct(string $method, string $path, array $headers, ?array $jsonBody, array $query)
   {
     $this->method = strtoupper($method);
     $this->path = $path;
     $this->headers = $headers;
     $this->jsonBody = $jsonBody;
+    $this->query = $query;
   }
 
   public static function fromGlobals(array $config): self
@@ -43,7 +45,9 @@ final class Request
       }
     }
 
-    return new self($method, $uriPath, $headers, $jsonBody);
+    $query = is_array($_GET ?? null) ? $_GET : [];
+
+    return new self($method, $uriPath, $headers, $jsonBody, $query);
   }
 
   public function method(): string { return $this->method; }
@@ -56,6 +60,12 @@ final class Request
   }
 
   public function json(): ?array { return $this->jsonBody; }
+
+  public function query(string $key, $default = null)
+  {
+    if (!array_key_exists($key, $this->query)) return $default;
+    return $this->query[$key];
+  }
 
   private static function headersLower(): array
   {

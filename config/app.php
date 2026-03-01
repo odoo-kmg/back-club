@@ -1,7 +1,7 @@
 <?php
 return [
   'app' => [
-    'debug' => false,
+    'debug' => true,
 
     // IMPORTANTE:
     // Como la API vive en https://TU_DOMINIO/api/..., el base_path debe ser '/api'
@@ -35,6 +35,11 @@ return [
   'allowed_headers' => ['Content-Type', 'Authorization', 'X-API-Key'],
   'allowed_methods' => ['GET', 'POST', 'PATCH', 'OPTIONS'],
 ],
+
+  // API keys para integraciones externas (NO usar en el browser)
+  'api_keys' => [
+    // 'botmaker' => 'CHANGE_ME',
+  ],
 
   // Token para herramientas temporales (hash.php). Cambia y luego borras tools/hash.php
   'tools' => [

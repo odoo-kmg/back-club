@@ -18,23 +18,44 @@ final class Auth
     }
 
     $token = trim($m[1]);
+
     try {
       $payload = Jwt::decodeAndVerify($token, (string)$config['jwt']['secret']);
     } catch (\Throwable $e) {
       throw new HttpException(401, 'UNAUTHORIZED', 'Token inválido');
     }
 
+    // Hardening: validate issuer & audience (prevents token reuse across apps)
+    $jwtCfg = $config['jwt'] ?? [];
+    $expectedIss = (string)($jwtCfg['issuer'] ?? '');
+    $expectedAud = (string)($jwtCfg['audience'] ?? '');
+
+    if ($expectedIss !== '' && (($payload['iss'] ?? null) !== $expectedIss)) {
+      throw new HttpException(401, 'UNAUTHORIZED', 'Token inválido');
+    }
+    if ($expectedAud !== '' && (($payload['aud'] ?? null) !== $expectedAud)) {
+      throw new HttpException(401, 'UNAUTHORIZED', 'Token inválido');
+    }
+
     $now = time();
+
+    if (isset($payload['nbf']) && $now < (int)$payload['nbf']) {
+      throw new HttpException(401, 'UNAUTHORIZED', 'Token inválido');
+    }
     if (isset($payload['exp']) && $now >= (int)$payload['exp']) {
       throw new HttpException(401, 'TOKEN_EXPIRED', 'Token expirado');
     }
 
     $userId = (int)($payload['sub'] ?? 0);
-    if ($userId <= 0) throw new HttpException(401, 'UNAUTHORIZED', 'Token inválido');
+    if ($userId <= 0) {
+      throw new HttpException(401, 'UNAUTHORIZED', 'Token inválido');
+    }
 
     $repo = new AuthRepository($db);
     $user = $repo->findActiveUserById($userId);
-    if (!$user) throw new HttpException(401, 'UNAUTHORIZED', 'Usuario inactivo o no existe');
+    if (!$user) {
+      throw new HttpException(401, 'UNAUTHORIZED', 'Usuario inactivo o no existe');
+    }
 
     $roles = $repo->getActiveRoleCodesForUser($userId);
     $perms = $repo->getActivePermissionCodesForUser($userId);
