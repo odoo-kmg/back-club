@@ -10,14 +10,18 @@ final class Request
   private array $headers;
   private ?array $jsonBody;
   private array $query;
+  private array $post;
+  private array $files;
 
-  private function __construct(string $method, string $path, array $headers, ?array $jsonBody, array $query)
+  private function __construct(string $method, string $path, array $headers, ?array $jsonBody, array $query, array $post, array $files)
   {
     $this->method = strtoupper($method);
     $this->path = $path;
     $this->headers = $headers;
     $this->jsonBody = $jsonBody;
     $this->query = $query;
+    $this->post = $post;
+    $this->files = $files;
   }
 
   public static function fromGlobals(array $config): self
@@ -35,7 +39,11 @@ final class Request
     $headers = self::headersLower();
     $jsonBody = null;
 
-    if (in_array(strtoupper($method), ['POST', 'PATCH', 'PUT'], true)) {
+    // JSON parsing only when content-type indicates JSON.
+    $ct = strtolower((string)($headers['content-type'] ?? ''));
+    $isJson = (strpos($ct, 'application/json') !== false);
+
+    if ($isJson && in_array(strtoupper($method), ['POST', 'PATCH', 'PUT'], true)) {
       $raw = file_get_contents('php://input');
       if (is_string($raw) && trim($raw) !== '') {
         $decoded = json_decode($raw, true);
@@ -46,8 +54,10 @@ final class Request
     }
 
     $query = is_array($_GET ?? null) ? $_GET : [];
+    $post  = is_array($_POST ?? null) ? $_POST : [];
+    $files = is_array($_FILES ?? null) ? $_FILES : [];
 
-    return new self($method, $uriPath, $headers, $jsonBody, $query);
+    return new self($method, $uriPath, $headers, $jsonBody, $query, $post, $files);
   }
 
   public function method(): string { return $this->method; }
@@ -65,6 +75,24 @@ final class Request
   {
     if (!array_key_exists($key, $this->query)) return $default;
     return $this->query[$key];
+  }
+
+  public function post(string $key, $default = null)
+  {
+    if (!array_key_exists($key, $this->post)) return $default;
+    return $this->post[$key];
+  }
+
+  /** @return array<string,mixed>|null */
+  public function file(string $field): ?array
+  {
+    if (!array_key_exists($field, $this->files)) return null;
+    $f = $this->files[$field];
+    if (!is_array($f)) return null;
+
+    // Normalize single file only (we don't support multiple in this MVP).
+    if (isset($f['name'])) return $f;
+    return null;
   }
 
   private static function headersLower(): array

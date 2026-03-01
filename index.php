@@ -21,6 +21,11 @@ use App\Controllers\DrawController;
 use App\Controllers\EligibilityRangeController;
 use App\Controllers\ExclusionController;
 
+// Fase 3
+use App\Controllers\ParticipantController;
+use App\Controllers\ActionBlockController;
+use App\Controllers\ImportController;
+
 $config = Config::load(__DIR__ . '/config');
 $db = Db::pdo($config);
 
@@ -45,6 +50,11 @@ $scopeController = new ParticipationScopeController($db);
 $drawController = new DrawController($db);
 $eligibilityRangeController = new EligibilityRangeController($db);
 $exclusionController = new ExclusionController($db);
+
+// Fase 3 (operación)
+$participantController = new ParticipantController($db);
+$actionBlockController = new ActionBlockController($db);
+$importController = new ImportController($db);
 
 try {
   // Small route table: [METHOD, REGEX, HANDLER]
@@ -208,6 +218,66 @@ try {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_DRAW_EXCLUSION_WRITE');
       $exclusionController->patch($ctx, (int)$m['id'], $req, $res);
+    }],
+
+    // ==========================
+    // FASE 3 - OPERACIÓN
+    // ==========================
+
+    // Participants
+    ['GET', '#^/v1/draws/(?P<id>\d+)/participants$#', function ($m) use ($participantController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_PARTICIPANT_READ');
+      $participantController->listByDraw((int)$m['id'], $req, $res);
+    }],
+    ['POST', '#^/v1/draws/(?P<id>\d+)/participants$#', function ($m) use ($participantController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_PARTICIPANT_REGISTER');
+      $participantController->register((int)$m['id'], $ctx, $req, $res);
+    }],
+    ['POST', '#^/v1/participants/(?P<id>\d+)/cancel$#', function ($m) use ($participantController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_PARTICIPANT_CANCEL');
+      $participantController->cancel((int)$m['id'], $ctx, $req, $res);
+    }],
+
+    // Action blocks
+    ['GET', '#^/v1/action-blocks$#', function () use ($actionBlockController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_BLOCK_READ');
+      $actionBlockController->list($req, $res);
+    }],
+    ['POST', '#^/v1/action-blocks$#', function () use ($actionBlockController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_BLOCK_WRITE');
+      $actionBlockController->create($ctx, $req, $res);
+    }],
+    ['PATCH', '#^/v1/action-blocks/(?P<id>\d+)$#', function ($m) use ($actionBlockController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_BLOCK_WRITE');
+      $actionBlockController->patch((int)$m['id'], $ctx, $req, $res);
+    }],
+    ['POST', '#^/v1/action-blocks/(?P<id>\d+)/unblock$#', function ($m) use ($actionBlockController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_BLOCK_WRITE');
+      $actionBlockController->unblock((int)$m['id'], $ctx, $req, $res);
+    }],
+
+    // Imports (action blocks)
+    ['POST', '#^/v1/imports/action-blocks$#', function () use ($importController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_BLOCK_IMPORT');
+      $importController->importActionBlocks($ctx, $req, $res);
+    }],
+    ['GET', '#^/v1/imports/(?P<id>\d+)$#', function ($m) use ($importController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_BLOCK_READ');
+      $importController->getImport((int)$m['id'], $req, $res);
+    }],
+    ['GET', '#^/v1/imports/(?P<id>\d+)/rows$#', function ($m) use ($importController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_BLOCK_READ');
+      $importController->listImportRows((int)$m['id'], $req, $res);
     }],
   ];
 
