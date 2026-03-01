@@ -20,11 +20,14 @@ use App\Controllers\ParticipationScopeController;
 use App\Controllers\DrawController;
 use App\Controllers\EligibilityRangeController;
 use App\Controllers\ExclusionController;
-
-// Fase 3
 use App\Controllers\ParticipantController;
 use App\Controllers\ActionBlockController;
 use App\Controllers\ImportController;
+
+// Fase 4
+use App\Controllers\ExecutionController;
+use App\Controllers\WinnerController;
+use App\Controllers\ExportController;
 
 $config = Config::load(__DIR__ . '/config');
 $db = Db::pdo($config);
@@ -41,23 +44,27 @@ $path   = $req->path();
 $authController = new AuthController($config, $db);
 $adminUserController = new AdminUserController($config, $db);
 
-// Fase 1 (catálogos)
+// Fase 1
 $eventController = new EventController($db);
 $resourceTypeController = new ResourceTypeController($db);
 $scopeController = new ParticipationScopeController($db);
 
-// Fase 2 (sorteos)
+// Fase 2
 $drawController = new DrawController($db);
 $eligibilityRangeController = new EligibilityRangeController($db);
 $exclusionController = new ExclusionController($db);
 
-// Fase 3 (operación)
+// Fase 3
 $participantController = new ParticipantController($db);
 $actionBlockController = new ActionBlockController($db);
 $importController = new ImportController($db);
 
+// Fase 4
+$executionController = new ExecutionController($db);
+$winnerController = new WinnerController($db);
+$exportController = new ExportController($db);
+
 try {
-  // Small route table: [METHOD, REGEX, HANDLER]
   $routes = [
 
     // Health
@@ -85,7 +92,6 @@ try {
     // FASE 1 - CATÁLOGOS
     // ==========================
 
-    // Events
     ['GET',  '#^/v1/events$#', function () use ($eventController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_EVENT_READ');
@@ -102,7 +108,6 @@ try {
       $eventController->patch($ctx, (int)$m['id'], $req, $res);
     }],
 
-    // Resource types
     ['GET', '#^/v1/resource-types$#', function () use ($resourceTypeController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_RESOURCE_READ');
@@ -119,7 +124,6 @@ try {
       $resourceTypeController->patch($ctx, (int)$m['id'], $req, $res);
     }],
 
-    // Participation scopes
     ['GET', '#^/v1/participation-scopes$#', function () use ($scopeController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_SCOPE_READ');
@@ -137,14 +141,12 @@ try {
     }],
 
     // ==========================
-    // FASE 2 - DRAWS (SORTEOS)
+    // FASE 2 - DRAWS
     // ==========================
 
-    // Draws
     ['GET', '#^/v1/draws$#', function () use ($drawController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
 
-      // If forRegistration=true we allow registrars; otherwise config read.
       $forRegistration = strtolower((string)$req->query('forRegistration', 'false'));
       $isForReg = in_array($forRegistration, ['1','true','yes','y','on'], true);
 
@@ -174,7 +176,6 @@ try {
       $drawController->patch($ctx, (int)$m['id'], $req, $res);
     }],
 
-    // Open/Close registration
     ['POST', '#^/v1/draws/(?P<id>\d+)/open-registration$#', function ($m) use ($drawController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_DRAW_OPEN_REG');
@@ -186,7 +187,6 @@ try {
       $drawController->closeRegistration($ctx, (int)$m['id'], $res);
     }],
 
-    // Eligibility ranges
     ['GET', '#^/v1/draws/(?P<id>\d+)/eligibility-ranges$#', function ($m) use ($drawController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_DRAW_READ');
@@ -203,7 +203,6 @@ try {
       $eligibilityRangeController->patch($ctx, (int)$m['id'], $req, $res);
     }],
 
-    // Exclusions
     ['GET', '#^/v1/draws/(?P<id>\d+)/exclusions$#', function ($m) use ($drawController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_DRAW_EXCLUSION_READ');
@@ -224,7 +223,6 @@ try {
     // FASE 3 - OPERACIÓN
     // ==========================
 
-    // Participants
     ['GET', '#^/v1/draws/(?P<id>\d+)/participants$#', function ($m) use ($participantController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'OPS_PARTICIPANT_READ');
@@ -241,7 +239,6 @@ try {
       $participantController->cancel((int)$m['id'], $ctx, $req, $res);
     }],
 
-    // Action blocks
     ['GET', '#^/v1/action-blocks$#', function () use ($actionBlockController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'OPS_BLOCK_READ');
@@ -263,7 +260,6 @@ try {
       $actionBlockController->unblock((int)$m['id'], $ctx, $req, $res);
     }],
 
-    // Imports (action blocks)
     ['POST', '#^/v1/imports/action-blocks$#', function () use ($importController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'OPS_BLOCK_IMPORT');
@@ -279,12 +275,57 @@ try {
       Auth::requirePermission($ctx, 'OPS_BLOCK_READ');
       $importController->listImportRows((int)$m['id'], $req, $res);
     }],
+
+    // ==========================
+    // FASE 4 - EJECUCIÓN + GANADORES + EXPORT
+    // ==========================
+
+    ['POST', '#^/v1/draws/(?P<id>\d+)/executions/start$#', function ($m) use ($executionController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_DRAW_EXECUTE_START');
+      $executionController->start((int)$m['id'], $ctx, $req, $res);
+    }],
+
+    ['POST', '#^/v1/draws/(?P<id>\d+)/executions/(?P<eid>\d+)/pick-next$#', function ($m) use ($executionController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_DRAW_EXECUTE_START');
+      $executionController->pickNext((int)$m['id'], (int)$m['eid'], $ctx, $req, $res);
+    }],
+
+    ['POST', '#^/v1/draws/(?P<id>\d+)/executions/(?P<eid>\d+)/finish$#', function ($m) use ($executionController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_DRAW_EXECUTE_FINISH');
+      $executionController->finish((int)$m['id'], (int)$m['eid'], $ctx, $res);
+    }],
+
+    ['POST', '#^/v1/draws/(?P<id>\d+)/executions/resume$#', function ($m) use ($executionController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_DRAW_EXECUTE_RESUME');
+      $executionController->resume((int)$m['id'], $ctx, $req, $res);
+    }],
+
+    ['POST', '#^/v1/draws/(?P<id>\d+)/executions/restart$#', function ($m) use ($executionController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_DRAW_EXECUTE_RESTART');
+      $executionController->restart((int)$m['id'], $ctx, $req, $res);
+    }],
+
+    ['GET', '#^/v1/draws/(?P<id>\d+)/winners$#', function ($m) use ($winnerController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'RPT_EXPORT_READ');
+      $winnerController->list((int)$m['id'], $req, $res);
+    }],
+
+    ['GET', '#^/v1/draws/(?P<id>\d+)/export$#', function ($m) use ($exportController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'RPT_EXPORT_READ');
+      $exportController->exportJson((int)$m['id'], $req, $res);
+    }],
   ];
 
   foreach ($routes as [$mtd, $rx, $handler]) {
     if ($method !== $mtd) continue;
     if (preg_match($rx, $path, $matches)) {
-      // pass named matches only
       $named = array_filter($matches, fn($k) => !is_int($k), ARRAY_FILTER_USE_KEY);
       $handler($named);
       exit;
@@ -305,20 +346,14 @@ try {
 } catch (Throwable $e) {
   $debug = (bool)($config['app']['debug'] ?? false);
 
-  // Default
   $status = 500;
   $code = 'SERVER_ERROR';
   $message = $debug ? $e->getMessage() : 'Error interno';
 
-  // Map common error types to predictable HTTP responses.
   if ($e instanceof \PDOException) {
     $sqlState = (string)($e->errorInfo[0] ?? '');
     $driverCode = (int)($e->errorInfo[1] ?? 0);
 
-    // MySQL common driver codes:
-    // 1062: Duplicate entry
-    // 1452: Cannot add or update a child row: a foreign key constraint fails
-    // 1048: Column cannot be null
     if ($sqlState === '23000' && $driverCode === 1062) {
       $status = 409;
       $code = 'DUPLICATE';
