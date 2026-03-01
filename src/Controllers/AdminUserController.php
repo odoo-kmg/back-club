@@ -74,9 +74,20 @@ final class AdminUserController
         'data' => ['id' => $newUserId, 'username' => $username, 'fullName' => $fullName, 'roles' => $roles],
         'error' => null,
       ]);
+    } catch (\PDOException $e) {
+      $this->db->rollBack();
+      $sqlState = (string)($e->errorInfo[0] ?? '');
+      $driverCode = (int)($e->errorInfo[1] ?? 0);
+      if ($sqlState === '23000' && $driverCode === 1062) {
+        throw new HttpException(409, 'USERNAME_EXISTS', 'username ya existe');
+      }
+      throw new HttpException(500, 'DB_ERROR', 'Error de base de datos', $e);
+    } catch (\RuntimeException $e) {
+      $this->db->rollBack();
+      throw new HttpException(400, 'VALIDATION', $e->getMessage());
     } catch (\Throwable $e) {
       $this->db->rollBack();
-      throw new HttpException(400, 'CREATE_USER_FAILED', $e->getMessage());
+      throw new HttpException(500, 'SERVER_ERROR', 'Error interno', $e);
     }
   }
 }

@@ -1,7 +1,7 @@
 <?php
 return [
   'app' => [
-    'debug' => true,
+    'debug' => false,
 
     // IMPORTANTE:
     // Como la API vive en https://TU_DOMINIO/api/..., el base_path debe ser '/api'

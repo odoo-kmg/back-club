@@ -6,12 +6,13 @@ namespace App\Http;
 final class HttpException extends \RuntimeException
 {
   public int $status;
-  public string $code;
+  public string $errorCode;
 
-  public function __construct(int $status, string $code, string $message)
+  public function __construct(int $status, string $errorCode, string $message, ?\Throwable $previous = null)
   {
-    parent::__construct($message);
+    // Keep Exception::$code numeric; use errorCode for API consumers.
+    parent::__construct($message, 0, $previous);
     $this->status = $status;
-    $this->code = $code;
+    $this->errorCode = $errorCode;
   }
 }

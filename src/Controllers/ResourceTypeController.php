@@ -72,6 +72,13 @@ final class ResourceTypeController
 
     $repo = new ResourceTypeRepository($this->db);
 
+    if (!$repo->getById($id)) {
+      throw new HttpException(404, 'NOT_FOUND', 'Tipo de recurso no existe');
+    }
+    if (count($fields) === 0) {
+      throw new HttpException(400, 'VALIDATION', 'No hay campos para actualizar');
+    }
+
     try {
       $repo->patch($id, $fields, $ctx->userId);
       $res->json(200, ['ok' => true, 'data' => ['id' => $id], 'error' => null]);

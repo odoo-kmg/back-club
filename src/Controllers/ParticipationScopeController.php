@@ -84,6 +84,13 @@ final class ParticipationScopeController
 
     $repo = new ParticipationScopeRepository($this->db);
 
+    if (!$repo->getById($id)) {
+      throw new HttpException(404, 'NOT_FOUND', 'Participation scope no existe');
+    }
+    if (count($fields) === 0) {
+      throw new HttpException(400, 'VALIDATION', 'No hay campos para actualizar');
+    }
+
     try {
       $repo->patch($id, $fields, $ctx->userId);
       $res->json(200, ['ok' => true, 'data' => ['id' => $id], 'error' => null]);

@@ -138,16 +138,58 @@ try {
   $res->json($e->status, [
     'ok' => false,
     'data' => null,
-    'error' => ['code' => $e->code, 'message' => $e->getMessage()],
+    'error' => ['code' => $e->errorCode, 'message' => $e->getMessage()],
   ]);
 } catch (Throwable $e) {
   $debug = (bool)($config['app']['debug'] ?? false);
-  $res->json(500, [
+
+  // Default
+  $status = 500;
+  $code = 'SERVER_ERROR';
+  $message = $debug ? $e->getMessage() : 'Error interno';
+
+  // Map common error types to predictable HTTP responses.
+  if ($e instanceof \PDOException) {
+    $sqlState = (string)($e->errorInfo[0] ?? '');
+    $driverCode = (int)($e->errorInfo[1] ?? 0);
+
+    // MySQL common driver codes:
+    // 1062: Duplicate entry
+    // 1452: Cannot add or update a child row: a foreign key constraint fails
+    // 1048: Column cannot be null
+    if ($sqlState === '23000' && $driverCode === 1062) {
+      $status = 409;
+      $code = 'DUPLICATE';
+      $message = $debug ? $e->getMessage() : 'Conflicto: registro duplicado';
+    } elseif ($sqlState === '23000' && $driverCode === 1452) {
+      $status = 409;
+      $code = 'FK_CONSTRAINT';
+      $message = $debug ? $e->getMessage() : 'Conflicto: referencia inválida';
+    } elseif ($driverCode === 1048) {
+      $status = 400;
+      $code = 'VALIDATION';
+      $message = $debug ? $e->getMessage() : 'Validación: falta un campo requerido';
+    } else {
+      $status = 500;
+      $code = 'DB_ERROR';
+      $message = $debug ? $e->getMessage() : 'Error de base de datos';
+    }
+  } elseif ($e instanceof \InvalidArgumentException) {
+    $status = 400;
+    $code = 'VALIDATION';
+    $message = $debug ? $e->getMessage() : 'Parámetros inválidos';
+  } elseif ($e instanceof \DomainException) {
+    $status = 422;
+    $code = 'BUSINESS_RULE';
+    $message = $debug ? $e->getMessage() : 'Regla de negocio no cumplida';
+  }
+
+  $res->json($status, [
     'ok' => false,
     'data' => null,
     'error' => [
-      'code' => 'SERVER_ERROR',
-      'message' => $debug ? $e->getMessage() : 'Error interno',
+      'code' => $code,
+      'message' => $message,
     ],
   ]);
 }
