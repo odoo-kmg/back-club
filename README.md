@@ -1,17 +1,76 @@
-# Backend Club Puerto Azul - Fase 2
+# Club Puerto Azul – Sorteos API
 
-Incluye:
+API REST para la gestión integral de **sorteos del Club Puerto Azul**. Permite administrar catálogos, sorteos, registro de participantes, bloqueos por acción, ejecución de sorteos, auditoría y exportación de resultados.
 
-- Seguridad (JWT + roles/permisos) y mejoras de manejo de errores.
-- Catálogos (Fase 1): events, resource-types, participation-scopes.
-- Sorteos (Fase 2): draws, open/close registration, eligibility-ranges, exclusions.
+---
 
-## Deploy
+## Base URL
 
-1) Copiar la carpeta `back-club` como `api/` dentro del docroot del subdominio.
-2) Editar `config/app.php` (DB + JWT secret + CORS).
-3) Validar: `GET /api/v1/ping`.
+- **DEV:** https://sorteos.kmg.com.ve/api
+- **PROD:** https://sorteos.clubpuertoazul.com/api
+- **Base path:** `/api/v1`
 
-## Nota
+---
 
-El archivo `tools/hash.php` es solo para bootstrap de hashes. En producción debe borrarse.
+## Autenticación
+
+La API soporta dos mecanismos de seguridad:
+
+- **JWT Bearer Token** (uso interno y administrativo)
+  - Header: `Authorization: Bearer <token>`
+- **API Key** (integraciones externas)
+  - Header: `X-API-Key: <key>`
+
+---
+
+## Envelope estándar de respuestas
+
+```json
+{
+  "ok": true,
+  "data": {},
+  "error": null
+}
+```
+
+En caso de error:
+
+```json
+{
+  "ok": false,
+  "data": null,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Descripción del error"
+  }
+}
+```
+
+---
+
+## Módulos del API
+
+- Health
+- Auth
+- Security / Admin
+- Catalogs
+- Draws
+- Participants
+- Action Blocks
+- Imports
+- Executions
+- Reports
+- Audit
+- External
+
+---
+
+## Documentación
+
+- OpenAPI: `openapi-club-puerto-azul.yaml`
+
+---
+
+## Licencia
+
+Uso interno – Club Puerto Azul
