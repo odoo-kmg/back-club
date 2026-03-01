@@ -1,0 +1,85 @@
+[28-Feb-2026 18:00:14 America/Chicago] PHP Fatal error:  Type of App\Http\HttpException::$code must not be defined (as in class Exception) in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Http/HttpException.php on line 6
+[28-Feb-2026 18:42:00 America/Chicago] PHP Fatal error:  Uncaught PDOException: PDO::__construct(): php_network_getaddresses: getaddrinfo for http failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+
+Next PDOException: SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for http failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+  thrown in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php on line 20
+[28-Feb-2026 18:42:09 America/Chicago] PHP Fatal error:  Uncaught PDOException: PDO::__construct(): php_network_getaddresses: getaddrinfo for http failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+
+Next PDOException: SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for http failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+  thrown in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php on line 20
+[28-Feb-2026 18:42:42 America/Chicago] PHP Fatal error:  Uncaught PDOException: PDO::__construct(): php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+
+Next PDOException: SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+  thrown in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php on line 20
+[28-Feb-2026 18:43:14 America/Chicago] PHP Fatal error:  Uncaught PDOException: PDO::__construct(): php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+
+Next PDOException: SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+  thrown in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php on line 20
+[28-Feb-2026 18:43:36 America/Chicago] PHP Fatal error:  Uncaught PDOException: PDO::__construct(): php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+
+Next PDOException: SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+  thrown in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php on line 20
+[28-Feb-2026 18:43:51 America/Chicago] PHP Fatal error:  Uncaught PDOException: PDO::__construct(): php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+
+Next PDOException: SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+  thrown in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php on line 20
+[28-Feb-2026 18:43:57 America/Chicago] PHP Fatal error:  Uncaught PDOException: PDO::__construct(): php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+
+Next PDOException: SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo for http://localhost:5173/ failed: Name or service not known in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php:20
+Stack trace:
+#0 /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php(20): PDO->__construct('mysql:host=http...', 'kmgcom_poc_user', Object(SensitiveParameterValue), Array)
+#1 /home2/kmgcom/sorteos.kmg.com.ve/api/index.php(18): App\Db::pdo(Array)
+#2 {main}
+  thrown in /home2/kmgcom/sorteos.kmg.com.ve/api/src/Db.php on line 20
