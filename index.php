@@ -17,6 +17,9 @@ use App\Controllers\AdminUserController;
 use App\Controllers\EventController;
 use App\Controllers\ResourceTypeController;
 use App\Controllers\ParticipationScopeController;
+use App\Controllers\DrawController;
+use App\Controllers\EligibilityRangeController;
+use App\Controllers\ExclusionController;
 
 $config = Config::load(__DIR__ . '/config');
 $db = Db::pdo($config);
@@ -37,6 +40,11 @@ $adminUserController = new AdminUserController($config, $db);
 $eventController = new EventController($db);
 $resourceTypeController = new ResourceTypeController($db);
 $scopeController = new ParticipationScopeController($db);
+
+// Fase 2 (sorteos)
+$drawController = new DrawController($db);
+$eligibilityRangeController = new EligibilityRangeController($db);
+$exclusionController = new ExclusionController($db);
 
 try {
   // Small route table: [METHOD, REGEX, HANDLER]
@@ -116,6 +124,90 @@ try {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_SCOPE_WRITE');
       $scopeController->patch($ctx, (int)$m['id'], $req, $res);
+    }],
+
+    // ==========================
+    // FASE 2 - DRAWS (SORTEOS)
+    // ==========================
+
+    // Draws
+    ['GET', '#^/v1/draws$#', function () use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+
+      // If forRegistration=true we allow registrars; otherwise config read.
+      $forRegistration = strtolower((string)$req->query('forRegistration', 'false'));
+      $isForReg = in_array($forRegistration, ['1','true','yes','y','on'], true);
+
+      if ($isForReg) {
+        if (!$ctx->hasPermission('OPS_PARTICIPANT_REGISTER') && !$ctx->hasPermission('CFG_DRAW_READ')) {
+          throw new HttpException(403, 'FORBIDDEN', 'Sin permisos');
+        }
+      } else {
+        Auth::requirePermission($ctx, 'CFG_DRAW_READ');
+      }
+
+      $drawController->list($req, $res);
+    }],
+    ['POST', '#^/v1/draws$#', function () use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_WRITE');
+      $drawController->create($ctx, $req, $res);
+    }],
+    ['GET', '#^/v1/draws/(?P<id>\d+)$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_READ');
+      $drawController->get((int)$m['id'], $res);
+    }],
+    ['PATCH', '#^/v1/draws/(?P<id>\d+)$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_WRITE');
+      $drawController->patch($ctx, (int)$m['id'], $req, $res);
+    }],
+
+    // Open/Close registration
+    ['POST', '#^/v1/draws/(?P<id>\d+)/open-registration$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_OPEN_REG');
+      $drawController->openRegistration($ctx, (int)$m['id'], $req, $res);
+    }],
+    ['POST', '#^/v1/draws/(?P<id>\d+)/close-registration$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_CLOSE_REG');
+      $drawController->closeRegistration($ctx, (int)$m['id'], $res);
+    }],
+
+    // Eligibility ranges
+    ['GET', '#^/v1/draws/(?P<id>\d+)/eligibility-ranges$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_READ');
+      $drawController->listEligibilityRanges((int)$m['id'], $req, $res);
+    }],
+    ['POST', '#^/v1/draws/(?P<id>\d+)/eligibility-ranges$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_WRITE');
+      $drawController->createEligibilityRange($ctx, (int)$m['id'], $req, $res);
+    }],
+    ['PATCH', '#^/v1/eligibility-ranges/(?P<id>\d+)$#', function ($m) use ($eligibilityRangeController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_WRITE');
+      $eligibilityRangeController->patch($ctx, (int)$m['id'], $req, $res);
+    }],
+
+    // Exclusions
+    ['GET', '#^/v1/draws/(?P<id>\d+)/exclusions$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_EXCLUSION_READ');
+      $drawController->listExclusions((int)$m['id'], $req, $res);
+    }],
+    ['POST', '#^/v1/draws/(?P<id>\d+)/exclusions$#', function ($m) use ($drawController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_EXCLUSION_WRITE');
+      $drawController->createExclusion($ctx, (int)$m['id'], $req, $res);
+    }],
+    ['PATCH', '#^/v1/exclusions/(?P<id>\d+)$#', function ($m) use ($exclusionController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_DRAW_EXCLUSION_WRITE');
+      $exclusionController->patch($ctx, (int)$m['id'], $req, $res);
     }],
   ];
 
