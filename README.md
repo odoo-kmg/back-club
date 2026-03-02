@@ -1,239 +1,331 @@
-# Club Puerto Azul – Sorteos API
+# Club Puerto Azul – Sorteos API (PHP + MySQL)
 
-API REST para la plataforma de **sorteos del Club Puerto Azul**. Permite administrar catálogos (eventos/temporadas, tipos de recurso y scopes), crear y operar sorteos, registrar participantes, aplicar bloqueos por número de acción, ejecutar sorteos (selección de ganadores), auditar operaciones y exportar resultados. citeturn3search2
+API REST para la plataforma de **sorteos del Club Puerto Azul**: administración de catálogos (eventos, tipos de recurso, scopes), configuración/operación de sorteos, registro de participantes, gestión de bloqueos, ejecución del sorteo (selección de ganadores), auditoría y exportación de resultados.
 
----
-
-## Base URL
-
-- **DEV (cPanel):** `https://sorteos.kmg.com.ve/api` citeturn3search2
-- **PROD (SiteGround):** `https://sorteos.clubpuertoazul.com/api` citeturn3search2
-- **Same-origin:** `/api` citeturn3search2
-- **Base path:** `/api/v1` citeturn3search2
+> Decisión de seguridad: **NO** publicar Swagger UI en PROD.  
+> La documentación oficial vive en este README (operación) y el archivo OpenAPI (contrato interno).
 
 ---
 
-## Autenticación
+## 1) URLs y versionado
 
-La API soporta dos mecanismos de seguridad: citeturn3search2
+**Base URL**
+- DEV (cPanel): `https://sorteos.kmg.com.ve/api`
+- PROD (SiteGround): `https://sorteos.clubpuertoazul.com/api`
+- Same-origin: `/api`
 
-### 1) JWT (Bearer)
-- Header: `Authorization: Bearer <token>` citeturn3search2
-
-### 2) API Key (integraciones externas)
-- Header: `X-API-Key: <key>` citeturn3search2
+**Versionado de API**
+- Todas las rutas comienzan con: `/v1/...`
 
 ---
 
-## Formato estándar de respuestas (Envelope)
+## 2) Autenticación y autorización
 
-### Respuesta OK
+### 2.1 JWT (usuarios internos – React)
+- Header: `Authorization: Bearer <token>`
+- El login retorna: `token`, `user`, `roles`, `permissions`.
+
+### 2.2 API Key (integraciones externas – Botmaker)
+- Header: `X-API-Key: <key>`
+- **No usar API-Key en React** (queda expuesta en el navegador).
+
+---
+
+## 3) Formato estándar de respuestas (Envelope)
+
+### OK
 ```json
-{
-  "ok": true,
-  "data": {},
-  "error": null
-}
+{ "ok": true, "data": {}, "error": null }
 ```
-citeturn3search2
 
-### Respuesta Error
+### Error
 ```json
 {
   "ok": false,
   "data": null,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Descripción del error"
-  }
+  "error": { "code": "ERROR_CODE", "message": "Descripción del error" }
 }
 ```
-citeturn3search2
 
 ---
 
-## Quickstart
+## 4) Errores HTTP y códigos más comunes
 
-### Health check
+| HTTP | Cuándo | error.code típico |
+|---:|---|---|
+| 400 | JSON inválido / validación de campos | BAD_JSON, VALIDATION |
+| 401 | No autenticado / token inválido | UNAUTHORIZED, TOKEN_EXPIRED, INVALID_CREDENTIALS |
+| 403 | Falta permiso | FORBIDDEN |
+| 404 | Recurso no existe | NOT_FOUND |
+| 409 | Conflicto de unicidad / ejecución duplicada | DUPLICATE, ACTION_ALREADY_PARTICIPATING_SCOPE, EXECUTION_ALREADY_STARTED |
+| 422 | Regla de negocio | REGISTRATION_CLOSED, ACTION_NOT_ELIGIBLE, ACTION_BLOCKED, DRAW_NOT_READY |
+
+---
+
+## 5) Zona horaria (muy importante)
+
+Negocio opera en **hora local Venezuela (UTC-4)**.  
+El backend utiliza tiempo UTC internamente, por lo que se recomienda **enviar fechas/hora en UTC con sufijo `Z`**.
+
+Ejemplo: **06:00 AM Venezuela** = **10:00Z**.
+
+---
+
+## 6) Soft delete + auditoría de tablas
+
+Convención en BD:
+- `active_from` (DATETIME)
+- `inactive_at` (DATETIME, NULL)
+- `created_at`, `updated_at`
+- `created_by`, `updated_by` (BIGINT, NULL)
+
+Regla operacional:
+- un registro está activo si: `active_from <= NOW()` y (`inactive_at` es NULL o `inactive_at > NOW()`).
+
+---
+
+## 7) Conceptos clave del modelo
+
+### 7.1 Event (evento / temporada)
+Periodo macro (ej.: Año 2026, Semana Santa 2026).
+
+### 7.2 Resource Type (tipo de recurso)
+Tipo de premio/sorteo: CHURUATA, RESIDENCIA, HABITACION, etc.
+
+> Nota: “Playa Mansa/Oceánica” **no es un resource_type**. Se modela como `draw.resource_context` (contexto del sorteo).
+
+### 7.3 Participation Scope (scope de participación)
+Entidad para **enforcement fuerte en BD**: una misma `actionNumber` no puede participar dos veces dentro de un mismo scope.
+
+Ejemplo: “Churuatas Viernes 2026-03-06” → scope compartido entre Mansa y Oceánica para que sean excluyentes **solo ese viernes**.
+
+### 7.4 Draw (sorteo)
+Instancia operativa:
+- evento + tipo de recurso + scope
+- ventana de registro (regOpenAt / regCloseAt)
+- configuración de ganadores (`winnersCount`) y ritmo (`pickIntervalSeconds`)
+- `resourceContext` (ej.: PLAYA_MANSA)
+
+---
+
+## 8) Ciclo de vida de un sorteo (draw.status)
+
+Flujo recomendado:
+1. **DRAFT** (configuración)
+2. **REG_OPEN** (registro abierto) → se habilita por `open-registration`
+3. **REG_CLOSED** (registro cerrado) → `close-registration`
+4. **EXECUTING** (sorteo en curso) → `executions/start`
+5. **FINISHED** (finalizado) → `executions/{id}/finish`
+
+---
+
+## 9) Ejecución del sorteo (motor) – comportamiento real
+
+- La aleatoriedad se ejecuta **en backend** usando `random_int()` (cripto-seguro).
+- El backend **NO** ejecuta un proceso asíncrono cada N segundos.
+- El frontend controla el ritmo (ej. cada 2s) llamando `pick-next`.
+
+### 9.1 Concurrencia / multi-navegador (lock implementado)
+- Solo puede existir **1 ejecución STARTED por draw**.
+- Si otro cliente intenta `start`, obtiene:
+  - `409 EXECUTION_ALREADY_STARTED` y `data.executionId` del que está activo.
+- Si alguien llama `pick-next` con un `executionId` que no es el activo:
+  - `409 EXECUTION_NOT_ACTIVE` y `data.executionId` activo.
+
+### 9.2 Caída del navegador
+Si se cierra el navegador durante el sorteo:
+- los ganadores ya seleccionados quedaron persistidos en BD (`draw_winner`).
+- se retoma consultando `GET /draws/{id}/winners` y continuando con `pick-next` usando el `executionId` activo.
+
+### 9.3 Restart vs Resume
+- **resume**: reanuda una ejecución existente (no borra ganadores).
+- **restart**: inactiva ganadores activos y crea una nueva ejecución (todo auditado).
+
+---
+
+## 10) Auditoría y transparencia
+
+La auditoría se registra en `audit_event`:
+- acciones de configuración/operación,
+- y **cada ganador** (`EXEC_PICK_NEXT`) con actor, drawId, executionId, winnerOrder y actionNumber.
+
+Endpoint:
+- `GET /v1/audit-events` (permiso `AUDIT_EVENT_READ`)
+
+---
+
+# 11) Quickstart (curl)
+
+> Define `BASE_URL`:
+```bash
+export BASE_URL="https://sorteos.kmg.com.ve/api"
+```
+
+### 11.1 Ping
 ```bash
 curl -sS "$BASE_URL/v1/ping"
 ```
-citeturn3search2
 
-### Login (JWT)
+### 11.2 Login
 ```bash
-curl -sS -X POST "$BASE_URL/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"<user>","password":"<pass>"}'
+curl -sS -X POST "$BASE_URL/v1/auth/login"   -H "Content-Type: application/json"   -d '{"username":"admin","password":"Caracas10"}'
 ```
-citeturn3search2
-
-> Nota: el contrato de login retorna `token`, `user`, `roles` y `permissions`. citeturn3search2
 
 ---
 
-## Módulos
+# 12) Endpoints por módulo (con comentarios operativos)
 
-La especificación OpenAPI está organizada en tags: Health, Auth, Security, Catalogs, Draws, Participants, Blocks, Executions, Reports, Audit, External. citeturn3search2
+> Todas las rutas asumen `Content-Type: application/json` y JWT salvo que se indique lo contrario.
 
----
+## 12.1 Health
+- `GET /v1/ping`  
+  Health check (sin auth).
 
-## Tabla de Endpoints (por módulo)
+## 12.2 Auth
+- `POST /v1/auth/login` (sin auth)  
+  Autenticación de usuario y entrega de JWT.
+- `GET /v1/auth/me`  
+  Devuelve sesión actual: usuario, roles y permisos.
 
-> Esta tabla es un **índice** rápido. El detalle completo de request/response está en `openapi-club-puerto-azul.yaml`. citeturn3search2
+## 12.3 Catalogs
+### Events
+- `GET /v1/events`  
+  Lista eventos/temporadas.
+- `POST /v1/events`  
+  Crea evento.
+- `PATCH /v1/events/{eventId}`  
+  Actualiza campos de evento (parcial).
 
-### Health
+### Resource Types
+- `GET /v1/resource-types`
+- `POST /v1/resource-types`
+- `PATCH /v1/resource-types/{resourceTypeId}`
 
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/ping` | Health check |
-citeturn3search2
+### Participation Scopes
+- `GET /v1/participation-scopes?eventId=&resourceTypeId=`  
+  Lista scopes (filtrable).
+- `POST /v1/participation-scopes`  
+  Crea scope. (Usar para exclusión cross-draw y unicidad por acción).
+- `PATCH /v1/participation-scopes/{scopeId}`
 
-### Auth
+## 12.4 Draws (configuración y operación)
+- `GET /v1/draws?eventId=&status=&forRegistration=true|false`  
+  Lista sorteos.  
+  - `forRegistration=true` filtra a los “operativos para registro” (para UI de registro).
+- `POST /v1/draws`  
+  Crea sorteo (queda en `DRAFT`).
+- `GET /v1/draws/{drawId}`  
+  Detalle de sorteo.
+- `PATCH /v1/draws/{drawId}`  
+  Actualiza sorteo.
 
-| Método | Endpoint | Descripción |
-|---|---|---|
-| POST | `/v1/auth/login` | Login (JWT) |
-| GET | `/v1/auth/me` | Sesión actual (usuario/roles/permisos) |
-citeturn3search2
+### Ventana de registro (cambia status)
+- `POST /v1/draws/{drawId}/open-registration`  
+  Pasa a `REG_OPEN`. Para pruebas se permite `{ "force": true }`.
+- `POST /v1/draws/{drawId}/close-registration`  
+  Pasa a `REG_CLOSED`.
 
-### Security / Admin
+### Rangos de elegibilidad
+- `GET /v1/draws/{drawId}/eligibility-ranges`
+- `POST /v1/draws/{drawId}/eligibility-ranges`  
+  Define rangos (ej. 0001–2000).
+- `PATCH /v1/eligibility-ranges/{rangeId}`  
+  Permite desactivar con `inactiveAt`.
 
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/admin/users` | Listar usuarios |
-| POST | `/v1/admin/users` | Crear usuario |
-| PATCH | `/v1/admin/users/{userId}` | Actualizar usuario (parcial) |
-| PUT | `/v1/admin/users/{userId}/roles` | Reemplazar roles de usuario |
-| GET | `/v1/admin/roles` | Listar roles |
-| POST | `/v1/admin/roles` | Crear rol |
-| GET | `/v1/admin/permissions` | Listar permisos |
-| PUT | `/v1/admin/roles/{roleId}/permissions` | Reemplazar permisos del rol |
-citeturn3search2
+### Exclusiones entre sorteos
+- `GET /v1/draws/{drawId}/exclusions`
+- `POST /v1/draws/{drawId}/exclusions`  
+  Crea regla:
+  - `ruleType=PARTICIPATION` excluye por participación en draw fuente
+  - `ruleType=WINNER` excluye por ganador en draw fuente
+- `PATCH /v1/exclusions/{exclusionId}`  
+  Inactivar regla.
 
-### Catalogs
+## 12.5 Participants (registro)
+- `GET /v1/draws/{drawId}/participants`  
+  Lista participantes (search/status/page/pageSize).
+- `POST /v1/draws/{drawId}/participants`  
+  Registra participante. Validaciones:
+  - draw debe estar `REG_OPEN` y dentro de ventana
+  - rango elegible
+  - no bloqueado (GLOBAL/DRAW)
+  - no duplicado por participation_scope
+- `POST /v1/participants/{participantId}/cancel`  
+  Cancelación lógica (requiere `reason`).
 
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/events` | Listar eventos/temporadas |
-| POST | `/v1/events` | Crear evento |
-| PATCH | `/v1/events/{eventId}` | Actualizar evento |
-| GET | `/v1/resource-types` | Listar tipos de recurso |
-| POST | `/v1/resource-types` | Crear tipo de recurso |
-| PATCH | `/v1/resource-types/{resourceTypeId}` | Actualizar tipo de recurso |
-| GET | `/v1/participation-scopes` | Listar scopes (filtros: eventId, resourceTypeId) |
-| POST | `/v1/participation-scopes` | Crear scope |
-| PATCH | `/v1/participation-scopes/{scopeId}` | Actualizar scope |
-citeturn3search2
+## 12.6 Blocks (acciones no elegibles) + Imports
+### Bloqueos manuales
+- `GET /v1/action-blocks?scopeType=&scopeDrawId=&actionNumber=&includeInactive=`  
+- `POST /v1/action-blocks`  
+  Crea bloqueo: `scopeType=GLOBAL|DRAW`.
+- `PATCH /v1/action-blocks/{blockId}`  
+  Cambia reason/fechas (incluye `inactiveAt`).
+- `POST /v1/action-blocks/{blockId}/unblock`  
+  Desbloquea (set `inactiveAt=now`, requiere `reason`).
 
-### Draws
+### Import de bloqueos (CSV)
+- `POST /v1/imports/action-blocks`  
+  Importación **CSV** via `multipart/form-data` con field `file`.  
+  Devuelve `importId` + conteos.
+- `GET /v1/imports/{importId}`  
+  Resumen de import.
+- `GET /v1/imports/{importId}/rows?status=OK|ERROR|SKIPPED`  
+  Detalle de filas.
 
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/draws` | Listar sorteos (filtros: eventId, status, forRegistration) |
-| POST | `/v1/draws` | Crear sorteo |
-| GET | `/v1/draws/{drawId}` | Obtener detalle de sorteo |
-| PATCH | `/v1/draws/{drawId}` | Actualizar sorteo |
-| POST | `/v1/draws/{drawId}/open-registration` | Abrir registro |
-| POST | `/v1/draws/{drawId}/close-registration` | Cerrar registro |
-| GET | `/v1/draws/{drawId}/eligibility-ranges` | Listar rangos de elegibilidad |
-| POST | `/v1/draws/{drawId}/eligibility-ranges` | Crear rango de elegibilidad |
-| PATCH | `/v1/eligibility-ranges/{rangeId}` | Actualizar rango (incl. inactiveAt) |
-| GET | `/v1/draws/{drawId}/exclusions` | Listar reglas de exclusión |
-| POST | `/v1/draws/{drawId}/exclusions` | Crear regla de exclusión |
-| PATCH | `/v1/exclusions/{exclusionId}` | Actualizar exclusión (incl. inactiveAt) |
-citeturn3search2
+> Nota: en esta versión se soporta **CSV** (XLSX queda planificado).
 
-### Participants
+## 12.7 Executions + Winners
+- `POST /v1/draws/{drawId}/executions/start`  
+  Inicia ejecución (solo si registro está cerrado).  
+  Lock: 409 si ya hay una ejecución STARTED (retorna executionId activo).
+- `POST /v1/draws/{drawId}/executions/{executionId}/pick-next`  
+  Selecciona siguiente ganador (server-side).  
+  409 si executionId no es el activo.
+- `POST /v1/draws/{drawId}/executions/{executionId}/finish`  
+  Finaliza ejecución y marca draw FINISHED.
+- `POST /v1/draws/{drawId}/executions/resume`  
+  Reanuda ejecución (body: `executionId` o `baseExecutionId` legacy).
+- `POST /v1/draws/{drawId}/executions/restart`  
+  Reinicia ejecución (requiere `reason`), inactiva ganadores activos y crea nueva ejecución.
+- `GET /v1/draws/{drawId}/winners`  
+  Lista ganadores en orden (`winnerOrder`).
 
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/draws/{drawId}/participants` | Listar participantes del sorteo (search, status, paginación) |
-| POST | `/v1/draws/{drawId}/participants` | Registrar participante |
-| POST | `/v1/participants/{participantId}/cancel` | Cancelar registro (requiere reason) |
-citeturn3search2
+## 12.8 Reports
+- `GET /v1/draws/{drawId}/export?format=json`  
+  Export **JSON** (recomendado).  
+  La UI genera XLSX localmente (más simple/rápido y evita libs server-side).
 
-### Blocks (Action Blocks + Imports)
+## 12.9 Audit
+- `GET /v1/audit-events?from=&to=&actionCode=&entityType=&entityId=&page=&pageSize=`  
+  Listado de auditoría.
 
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/action-blocks` | Listar bloqueos (filtros: scopeType, scopeDrawId, actionNumber) |
-| POST | `/v1/action-blocks` | Crear bloqueo |
-| PATCH | `/v1/action-blocks/{blockId}` | Actualizar bloqueo (incl. inactiveAt) |
-| POST | `/v1/action-blocks/{blockId}/unblock` | Desbloquear (inactiveAt=now; requiere reason) |
-| POST | `/v1/imports/action-blocks` | Importar bloqueos desde archivo (CSV/XLSX) multipart `file` |
-| GET | `/v1/imports/{importId}` | Ver resumen de importación |
-| GET | `/v1/imports/{importId}/rows` | Ver filas importadas (filtro: status=OK|ERROR|SKIPPED) |
-citeturn3search2
+## 12.10 External (Botmaker)
+> Estos endpoints no usan JWT, usan `X-API-Key`.
 
-### Executions (Ejecución + Ganadores)
-
-| Método | Endpoint | Descripción |
-|---|---|---|
-| POST | `/v1/draws/{drawId}/executions/start` | Iniciar ejecución |
-| POST | `/v1/draws/{drawId}/executions/{executionId}/pick-next` | Seleccionar siguiente ganador |
-| POST | `/v1/draws/{drawId}/executions/{executionId}/finish` | Finalizar ejecución |
-| POST | `/v1/draws/{drawId}/executions/resume` | Reanudar ejecución (requiere baseExecutionId) |
-| POST | `/v1/draws/{drawId}/executions/restart` | Reiniciar ejecución (requiere baseExecutionId, reason) |
-| GET | `/v1/draws/{drawId}/winners` | Listar ganadores |
-citeturn3search2
-
-### Reports
-
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/draws/{drawId}/export` | Exportar resultados (format=json|xlsx) |
-citeturn3search2
-
-### Audit
-
-| Método | Endpoint | Descripción |
-|---|---|---|
-| GET | `/v1/audit-events` | Listar auditoría (filtros: from, to, entityType, entityId, actionCode) |
-citeturn3search2
-
-### External (Botmaker)
-
-> Estos endpoints usan **API Key** (`X-API-Key`). citeturn3search2
-
-| Método | Endpoint | Descripción |
-|---|---|---|
-| POST | `/v1/external/botmaker/register` | Registro de participante desde Botmaker |
-| POST | `/v1/external/botmaker/interaction` | Log de interacción Botmaker |
-citeturn3search2
-
----
-
-## Parámetros comunes
-
-- `page` (default 1), `pageSize` (default 50, max 500) citeturn3search2
-- `search` (búsqueda textual) citeturn3search2
-- `includeInactive` (soft delete) citeturn3search2
+- `POST /v1/external/botmaker/register`  
+  Registro desde WhatsApp aplicando mismas reglas del backend.
+- `POST /v1/external/botmaker/interaction`  
+  Bitácora libre (payload completo).
 
 ---
 
-## Reglas de negocio (alto nivel)
-
-- **Soft delete**: múltiples recursos usan `inactiveAt` para desactivar sin borrar. citeturn3search2
-- **Bloqueos**: `scopeType` puede ser `GLOBAL` o `DRAW` (y opcionalmente `scopeDrawId`). citeturn3search2
-- **Exclusiones**: reglas `ruleType` incluyen `PARTICIPATION` y `WINNER` apuntando a `targetDrawId`. citeturn3search2
-- **Registro de participantes**: requiere `actionNumber` y `channel` (`ASSISTED`, `WEB`, `WHATSAPP`). citeturn3search2
-
----
-
-## Fuente de verdad
-
-- Especificación OpenAPI: `openapi-club-puerto-azul.yaml` citeturn3search2
+## 13) Postman (recomendado)
+- Importar la colección desde OpenAPI **en formato JSON** (Postman es más estable así).
+- Mantener un Environment con:
+  - `BASE_URL`
+  - `TOKEN` (auto-set al hacer login)
+  - `BOTMAKER_API_KEY`
 
 ---
 
-## Ambientes
-
-- **DEV**: pruebas, imports y validación de ejecuciones. citeturn3search2
-- **PROD**: operación real (acceso restringido). citeturn3search2
+## 14) Seguridad operativa (mínimo indispensable)
+- `config/app.php`: no exponer secretos en repositorios públicos.
+- `app.debug=false` en PROD.
+- CORS restringido al/los dominios reales.
+- Proteger `/api/docs` si algún día se publica documentación (Basic Auth / allowlist IP).
+- Rotar `X-API-Key` de Botmaker si se sospecha filtración.
 
 ---
 
 ## Licencia
-
 Uso interno – Club Puerto Azul
