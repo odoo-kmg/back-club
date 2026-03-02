@@ -22,6 +22,43 @@ final class DrawExecutionRepository
     return $row ?: null;
   }
 
+  /**
+   * Returns the currently STARTED execution id for a draw (if any).
+   * We treat STARTED as the active lock.
+   */
+  public function findStartedExecutionIdByDraw(int $drawId): ?int
+  {
+    $st = $this->db->prepare("SELECT id
+                              FROM draw_execution
+                              WHERE draw_id = ?
+                                AND status = 'STARTED'
+                                AND inactive_at IS NULL
+                              ORDER BY id DESC
+                              LIMIT 1");
+    $st->execute([$drawId]);
+    $row = $st->fetch();
+    if (!$row) return null;
+    return (int)$row['id'];
+  }
+
+  /**
+   * Safety: finalize any started executions for draw to avoid multiple active locks.
+   */
+  public function finishAllStartedByDraw(int $drawId, int $actorUserId): int
+  {
+    $now = $this->nowUtc();
+    $st = $this->db->prepare("UPDATE draw_execution
+                              SET status = 'FINISHED',
+                                  ended_at = ?,
+                                  updated_at = NOW(),
+                                  updated_by = ?
+                              WHERE draw_id = ?
+                                AND status = 'STARTED'
+                                AND inactive_at IS NULL");
+    $st->execute([$now, $actorUserId, $drawId]);
+    return $st->rowCount();
+  }
+
   public function create(int $drawId, string $mode, ?int $baseExecutionId, int $executedByUserId, string $configSnapshotJson): int
   {
     $now = $this->nowUtc();

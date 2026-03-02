@@ -12,6 +12,7 @@ use App\Repositories\ActionBlockRepository;
 use App\Repositories\DrawExecutionRepository;
 use App\Repositories\DrawWinnerRepository;
 use App\Repositories\DrawExclusionRepository;
+use App\Repositories\AuditEventRepository;
 use App\Security\AuthContext;
 use PDO;
 
@@ -35,7 +36,19 @@ final class ExecutionController
       throw new HttpException(422, 'DRAW_NOT_READY', 'Debes cerrar el registro antes de iniciar el sorteo');
     }
 
-    // Snapshot minimal (keep it simple)
+    $execRepo = new DrawExecutionRepository($this->db);
+
+    // === LOCK: only one STARTED execution per draw ===
+    $startedId = $execRepo->findStartedExecutionIdByDraw($drawId);
+    if ($startedId !== null) {
+      $res->json(409, [
+        'ok' => false,
+        'data' => ['executionId' => $startedId],
+        'error' => ['code' => 'EXECUTION_ALREADY_STARTED', 'message' => 'Ya existe una ejecución STARTED para este sorteo (usa resume)'],
+      ]);
+      return;
+    }
+
     $snapshot = json_encode([
       'draw' => [
         'id' => (int)$draw['id'],
@@ -53,12 +66,19 @@ final class ExecutionController
       'startedAt' => $now,
       'executedByUserId' => $ctx->userId,
     ], JSON_UNESCAPED_UNICODE);
-
     if ($snapshot === false) $snapshot = '{"error":"snapshot"}';
 
-    $execRepo = new DrawExecutionRepository($this->db);
     $executionId = $execRepo->create($drawId, 'NEW', null, $ctx->userId, $snapshot);
     $execRepo->updateDrawStatus($drawId, 'EXECUTING', $ctx->userId);
+
+    (new AuditEventRepository($this->db))->insert(
+      $ctx->userId,
+      'EXEC_START',
+      'draw_execution',
+      $executionId,
+      ['drawId' => $drawId],
+      $ctx->userId
+    );
 
     $res->json(201, [
       'ok' => true,
@@ -76,15 +96,33 @@ final class ExecutionController
     if ($executionId <= 0) throw new HttpException(400, 'VALIDATION', 'executionId es requerido');
 
     $execRepo = new DrawExecutionRepository($this->db);
+
+    // lock: if another execution is STARTED and it's not this one => conflict
+    $startedId = $execRepo->findStartedExecutionIdByDraw($drawId);
+    if ($startedId !== null && $startedId !== $executionId) {
+      $res->json(409, [
+        'ok' => false,
+        'data' => ['executionId' => $startedId],
+        'error' => ['code' => 'EXECUTION_ALREADY_STARTED', 'message' => 'Ya existe otra ejecución STARTED para este sorteo'],
+      ]);
+      return;
+    }
+
     $exec = $execRepo->getById($executionId);
     if (!$exec) throw new HttpException(404, 'NOT_FOUND', 'Ejecución no existe');
-
-    if ((int)$exec['draw_id'] !== $drawId) {
-      throw new HttpException(409, 'CONFLICT', 'La ejecución no pertenece a ese sorteo');
-    }
+    if ((int)$exec['draw_id'] !== $drawId) throw new HttpException(409, 'CONFLICT', 'La ejecución no pertenece a ese sorteo');
 
     $execRepo->markStarted($executionId, $ctx->userId);
     $execRepo->updateDrawStatus($drawId, 'EXECUTING', $ctx->userId);
+
+    (new AuditEventRepository($this->db))->insert(
+      $ctx->userId,
+      'EXEC_RESUME',
+      'draw_execution',
+      $executionId,
+      ['drawId' => $drawId],
+      $ctx->userId
+    );
 
     $res->json(200, [
       'ok' => true,
@@ -108,9 +146,12 @@ final class ExecutionController
     $draw = $drawRepo->getById($drawId);
     if (!$draw) throw new HttpException(404, 'NOT_FOUND', 'Sorteo no existe');
 
-    // Inactivate current active winners
     $winnerRepo = new DrawWinnerRepository($this->db);
     $voided = $winnerRepo->inactivateActiveWinnersByDraw($drawId, $ctx->userId);
+
+    $execRepo = new DrawExecutionRepository($this->db);
+    // ensure no parallel started execution remains
+    $execRepo->finishAllStartedByDraw($drawId, $ctx->userId);
 
     $now = gmdate('Y-m-d H:i:s');
     $snapshot = json_encode([
@@ -123,9 +164,17 @@ final class ExecutionController
     ], JSON_UNESCAPED_UNICODE);
     if ($snapshot === false) $snapshot = '{"error":"snapshot"}';
 
-    $execRepo = new DrawExecutionRepository($this->db);
     $executionId = $execRepo->create($drawId, 'RESTART', $baseExecutionId, $ctx->userId, $snapshot);
     $execRepo->updateDrawStatus($drawId, 'EXECUTING', $ctx->userId);
+
+    (new AuditEventRepository($this->db))->insert(
+      $ctx->userId,
+      'EXEC_RESTART',
+      'draw_execution',
+      $executionId,
+      ['drawId' => $drawId, 'voidedWinners' => $voided, 'reason' => $reason],
+      $ctx->userId
+    );
 
     $res->json(201, [
       'ok' => true,
@@ -137,6 +186,18 @@ final class ExecutionController
   public function pickNext(int $drawId, int $executionId, AuthContext $ctx, Request $req, Response $res): void
   {
     $execRepo = new DrawExecutionRepository($this->db);
+
+    // lock: only active STARTED execution can pick
+    $startedId = $execRepo->findStartedExecutionIdByDraw($drawId);
+    if ($startedId !== null && $startedId !== $executionId) {
+      $res->json(409, [
+        'ok' => false,
+        'data' => ['executionId' => $startedId],
+        'error' => ['code' => 'EXECUTION_NOT_ACTIVE', 'message' => 'Esta ejecución no es la activa para el sorteo'],
+      ]);
+      return;
+    }
+
     $exec = $execRepo->getById($executionId);
     if (!$exec) throw new HttpException(404, 'NOT_FOUND', 'Ejecución no existe');
     if ((int)$exec['draw_id'] !== $drawId) throw new HttpException(409, 'CONFLICT', 'Ejecución no pertenece al sorteo');
@@ -155,22 +216,16 @@ final class ExecutionController
       return;
     }
 
-    // Load active participants of draw
     $participants = $this->listActiveParticipantsActionNumbers($drawId);
-
-    // Exclude already winners in this draw
     $alreadyWinners = array_flip($winnerRepo->listActiveActionNumbersByDraw($drawId));
 
-    // Eligibility re-check (in case ranges changed after registration)
     $rangeRepo = new EligibilityRangeRepository($this->db);
     $ranges = $rangeRepo->listByDraw($drawId, false);
 
-    // Exclusions from other draws (target=this draw)
     $exclusionRepo = new DrawExclusionRepository($this->db);
     $rules = $exclusionRepo->listActiveByTarget($drawId);
     $excludedByRules = $this->resolveExcludedActionsByRules($rules);
 
-    // Blocks
     $blockRepo = new ActionBlockRepository($this->db);
 
     $eligible = [];
@@ -183,7 +238,6 @@ final class ExecutionController
     }
 
     if (count($eligible) === 0) {
-      // No more eligible participants; finish early.
       $res->json(200, [
         'ok' => true,
         'data' => ['finished' => true, 'reason' => 'NO_ELIGIBLE_PARTICIPANTS'],
@@ -192,7 +246,6 @@ final class ExecutionController
       return;
     }
 
-    // Try insert winner up to N times to mitigate concurrency duplicates.
     $maxAttempts = 5;
     for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
       $idx = random_int(0, count($eligible) - 1);
@@ -200,7 +253,16 @@ final class ExecutionController
 
       try {
         $winnerOrder = $currentWinners + 1;
-        $winnerRepo->insertWinner($executionId, $drawId, $picked, $winnerOrder, $ctx->userId);
+        $winnerId = $winnerRepo->insertWinner($executionId, $drawId, $picked, $winnerOrder, $ctx->userId);
+
+        (new AuditEventRepository($this->db))->insert(
+          $ctx->userId,
+          'EXEC_PICK_NEXT',
+          'draw_winner',
+          $winnerId,
+          ['drawId' => $drawId, 'executionId' => $executionId, 'actionNumber' => $picked, 'winnerOrder' => $winnerOrder],
+          $ctx->userId
+        );
 
         $res->json(200, [
           'ok' => true,
@@ -216,9 +278,7 @@ final class ExecutionController
         $sqlState = (string)($e->errorInfo[0] ?? '');
         $driverCode = (int)($e->errorInfo[1] ?? 0);
         if ($sqlState === '23000' && $driverCode === 1062) {
-          // Someone else inserted; recalc winner count and retry.
           $currentWinners = $winnerRepo->countActiveByDraw($drawId);
-          // remove picked and continue
           $eligible = array_values(array_filter($eligible, fn($n) => $n !== $picked));
           if (count($eligible) === 0) break;
           continue;
@@ -240,6 +300,15 @@ final class ExecutionController
     $execRepo->markFinished($executionId, $ctx->userId);
     $execRepo->updateDrawStatus($drawId, 'FINISHED', $ctx->userId);
 
+    (new AuditEventRepository($this->db))->insert(
+      $ctx->userId,
+      'EXEC_FINISH',
+      'draw_execution',
+      $executionId,
+      ['drawId' => $drawId],
+      $ctx->userId
+    );
+
     $res->json(200, ['ok' => true, 'data' => ['executionId' => $executionId, 'status' => 'FINISHED'], 'error' => null]);
   }
 
@@ -258,7 +327,7 @@ final class ExecutionController
 
   private function isEligibleByRanges(int $actionNumber, array $ranges): bool
   {
-    if (count($ranges) === 0) return true; // if no ranges, allow (but registration phase enforces). Keep permissive here.
+    if (count($ranges) === 0) return true;
     foreach ($ranges as $r) {
       $from = (int)$r['range_from_action'];
       $to = (int)$r['range_to_action'];
@@ -267,7 +336,7 @@ final class ExecutionController
     return false;
   }
 
-  /** @return array<int,bool> set of excluded action numbers */
+  /** @return array<int,bool> */
   private function resolveExcludedActionsByRules(array $rules): array
   {
     $excluded = [];
@@ -284,7 +353,7 @@ final class ExecutionController
                                     AND status = 'ACTIVE'");
         $st->execute([$sourceDrawId]);
         foreach ($st->fetchAll() as $row) {
-          $excluded[(int)$row['action_number']] = True;
+          $excluded[(int)$row['action_number']] = true;
         }
       } elseif ($type === 'WINNER') {
         $st = $this->db->prepare("SELECT action_number
@@ -293,7 +362,7 @@ final class ExecutionController
                                     AND inactive_at IS NULL");
         $st->execute([$sourceDrawId]);
         foreach ($st->fetchAll() as $row) {
-          $excluded[(int)$row['action_number']] = True;
+          $excluded[(int)$row['action_number']] = true;
         }
       }
     }
