@@ -23,6 +23,14 @@ final class ExecutionController
 
   public function start(int $drawId, AuthContext $ctx, Request $req, Response $res): void
   {
+    // Optional body: { "mode": "NEW"|"AUTO" }
+    // AUTO mode: backend precomputes winners and reveals them over time (see draw_winner.reveal_at).
+    $body = $req->json() ?: [];
+    $mode = strtoupper(trim((string)($body['mode'] ?? 'NEW')));
+    if (!in_array($mode, ['NEW', 'AUTO'], true)) {
+      throw new HttpException(400, 'VALIDATION', 'mode inválido (usa NEW o AUTO)');
+    }
+
     $drawRepo = new DrawRepository($this->db);
     $draw = $drawRepo->getById($drawId);
     if (!$draw) throw new HttpException(404, 'NOT_FOUND', 'Sorteo no existe');
@@ -44,7 +52,7 @@ final class ExecutionController
       $res->json(409, [
         'ok' => false,
         'data' => ['executionId' => $startedId],
-        'error' => ['code' => 'EXECUTION_ALREADY_STARTED', 'message' => 'Ya existe una ejecución STARTED para este sorteo (usa resume)'],
+        'error' => ['code' => 'EXECUTION_ALREADY_STARTED', 'message' => 'Ya existe una ejecución STARTED para este sorteo'],
       ]);
       return;
     }
@@ -68,7 +76,7 @@ final class ExecutionController
     ], JSON_UNESCAPED_UNICODE);
     if ($snapshot === false) $snapshot = '{"error":"snapshot"}';
 
-    $executionId = $execRepo->create($drawId, 'NEW', null, $ctx->userId, $snapshot);
+    $executionId = $execRepo->create($drawId, $mode, null, $ctx->userId, $snapshot);
     $execRepo->updateDrawStatus($drawId, 'EXECUTING', $ctx->userId);
 
     (new AuditEventRepository($this->db))->insert(
@@ -80,9 +88,31 @@ final class ExecutionController
       $ctx->userId
     );
 
+    // AUTO: precompute winners now, but reveal them gradually based on reveal_at.
+    if ($mode === 'AUTO') {
+      $intervalSec = (int)$draw['pick_interval_seconds'];
+      if ($intervalSec <= 0) $intervalSec = 2;
+      $result = $this->precomputeWinnersAuto($drawId, $executionId, $ctx->userId, $intervalSec);
+
+      $res->json(201, [
+        'ok' => true,
+        'data' => [
+          'executionId' => $executionId,
+          'status' => 'STARTED',
+          'mode' => 'AUTO',
+          'intervalSeconds' => $intervalSec,
+          'scheduledWinners' => $result['scheduledWinners'],
+          'scheduleStartAt' => $result['scheduleStartAt'],
+          'scheduleEndAt' => $result['scheduleEndAt'],
+        ],
+        'error' => null,
+      ]);
+      return;
+    }
+
     $res->json(201, [
       'ok' => true,
-      'data' => ['executionId' => $executionId, 'status' => 'STARTED'],
+      'data' => ['executionId' => $executionId, 'status' => 'STARTED', 'mode' => 'NEW'],
       'error' => null,
     ]);
   }
@@ -202,6 +232,10 @@ final class ExecutionController
     if (!$exec) throw new HttpException(404, 'NOT_FOUND', 'Ejecución no existe');
     if ((int)$exec['draw_id'] !== $drawId) throw new HttpException(409, 'CONFLICT', 'Ejecución no pertenece al sorteo');
     if ((string)$exec['status'] !== 'STARTED') throw new HttpException(422, 'EXECUTION_NOT_STARTED', 'Ejecución no está STARTED');
+
+    if (strtoupper((string)($exec['mode'] ?? 'NEW')) === 'AUTO') {
+      throw new HttpException(422, 'AUTO_MODE', 'Esta ejecución está en modo AUTO. Los ganadores se generan al iniciar y se revelan por tiempo.');
+    }
 
     $drawRepo = new DrawRepository($this->db);
     $draw = $drawRepo->getById($drawId);
@@ -375,5 +409,121 @@ final class ExecutionController
     if ($activeFrom > $now) return false;
     if ($inactiveAt === null || $inactiveAt === '') return true;
     return ((string)$inactiveAt > $now);
+  }
+
+  /**
+   * AUTO mode: precompute winners upfront using cryptographically-secure RNG (random_int)
+   * and schedule reveal with draw_winner.reveal_at.
+   *
+   * Why this design: shared hosting has no cron/daemon. We cannot reliably run background
+   * processes that pick one winner every N seconds. Instead, we select winners once,
+   * persist them, and reveal progressively using reveal_at timestamps.
+   *
+   * @return array{scheduledWinners:int,scheduleStartAt:string,scheduleEndAt:string}
+   */
+  private function precomputeWinnersAuto(int $drawId, int $executionId, int $actorUserId, int $intervalSeconds): array
+  {
+    $drawRepo = new DrawRepository($this->db);
+    $draw = $drawRepo->getById($drawId);
+    if (!$draw) throw new HttpException(404, 'NOT_FOUND', 'Sorteo no existe');
+
+    $winnersCount = (int)$draw['winners_count'];
+    if ($winnersCount <= 0) throw new HttpException(422, 'DRAW_NOT_READY', 'winnersCount inválido');
+
+    $winnerRepo = new DrawWinnerRepository($this->db);
+    $existing = $winnerRepo->countActiveByDraw($drawId);
+    if ($existing > 0) {
+      // Safety: avoid mixing schedules. Caller should restart if they want a new run.
+      throw new HttpException(409, 'WINNERS_ALREADY_EXIST', 'Ya existen ganadores activos para este sorteo. Usa restart para reiniciar.');
+    }
+
+    $participants = $this->listActiveParticipantsActionNumbers($drawId);
+    $rangeRepo = new EligibilityRangeRepository($this->db);
+    $ranges = $rangeRepo->listByDraw($drawId, false);
+
+    $exclusionRepo = new DrawExclusionRepository($this->db);
+    $rules = $exclusionRepo->listActiveByTarget($drawId);
+    $excludedByRules = $this->resolveExcludedActionsByRules($rules);
+
+    $blockRepo = new ActionBlockRepository($this->db);
+
+    $eligible = [];
+    foreach ($participants as $actionNumber) {
+      if (isset($excludedByRules[$actionNumber])) continue;
+      if (!$this->isEligibleByRanges($actionNumber, $ranges)) continue;
+      if ($blockRepo->isActionBlocked($actionNumber, $drawId)) continue;
+      $eligible[] = $actionNumber;
+    }
+
+    if (count($eligible) === 0) {
+      return [
+        'scheduledWinners' => 0,
+        'scheduleStartAt' => gmdate('Y-m-d H:i:s'),
+        'scheduleEndAt' => gmdate('Y-m-d H:i:s'),
+      ];
+    }
+
+    // Fisher–Yates shuffle with random_int for unbiased permutation.
+    for ($i = count($eligible) - 1; $i > 0; $i--) {
+      $j = random_int(0, $i);
+      if ($i !== $j) {
+        $tmp = $eligible[$i];
+        $eligible[$i] = $eligible[$j];
+        $eligible[$j] = $tmp;
+      }
+    }
+
+    $pickedList = array_slice($eligible, 0, min($winnersCount, count($eligible)));
+    $nowUtc = gmdate('Y-m-d H:i:s');
+    $scheduleStartAt = $nowUtc;
+
+    $this->db->beginTransaction();
+    try {
+      $scheduled = 0;
+      foreach ($pickedList as $idx => $actionNumber) {
+        $winnerOrder = $idx + 1;
+        $revealAt = gmdate('Y-m-d H:i:s', time() + (($winnerOrder - 1) * $intervalSeconds));
+        $winnerId = $winnerRepo->insertWinnerWithRevealAt(
+          $executionId,
+          $drawId,
+          (int)$actionNumber,
+          $winnerOrder,
+          $nowUtc,
+          $revealAt,
+          $actorUserId
+        );
+
+        (new AuditEventRepository($this->db))->insert(
+          $actorUserId,
+          'EXEC_PICK_NEXT',
+          'draw_winner',
+          $winnerId,
+          [
+            'drawId' => $drawId,
+            'executionId' => $executionId,
+            'actionNumber' => (int)$actionNumber,
+            'winnerOrder' => $winnerOrder,
+            'revealAt' => $revealAt,
+            'mode' => 'AUTO',
+          ],
+          $actorUserId
+        );
+        $scheduled++;
+      }
+      $this->db->commit();
+
+      $scheduleEndAt = $scheduled > 0
+        ? gmdate('Y-m-d H:i:s', time() + (($scheduled - 1) * $intervalSeconds))
+        : $scheduleStartAt;
+
+      return [
+        'scheduledWinners' => $scheduled,
+        'scheduleStartAt' => $scheduleStartAt,
+        'scheduleEndAt' => $scheduleEndAt,
+      ];
+    } catch (\Throwable $e) {
+      $this->db->rollBack();
+      throw $e;
+    }
   }
 }

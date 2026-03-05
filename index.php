@@ -313,7 +313,7 @@ try {
     ['GET', '#^/v1/draws/(?P<id>\d+)/winners$#', function ($m) use ($winnerController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'RPT_EXPORT_READ');
-      $winnerController->list((int)$m['id'], $req, $res);
+      $winnerController->list((int)$m['id'], $ctx, $req, $res);
     }],
 
     ['GET', '#^/v1/draws/(?P<id>\d+)/export$#', function ($m) use ($exportController, $config, $db, $req, $res) {
