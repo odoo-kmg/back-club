@@ -18,6 +18,26 @@ final class ParticipantController
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
 
+  /**
+   * Public (no-auth) registration endpoint.
+   * Forces channel = WEB and uses a service user for audit fields.
+   */
+  public function registerPublic(int $drawId, int $serviceUserId, string $serviceUsername, Request $req, Response $res): void
+  {
+    if ($serviceUserId <= 0) {
+      throw new HttpException(500, 'SERVER_ERROR', 'Configuración incompleta');
+    }
+
+    $ctx = new AuthContext($serviceUserId, $serviceUsername, 'Servicio - Registro Web', [], []);
+
+    $body = $req->json();
+    if (!$body) throw new HttpException(400, 'BAD_JSON', 'JSON inválido o vacío');
+    // Force WEB channel regardless of client payload.
+    $body['channel'] = 'WEB';
+
+    $this->registerInternal($drawId, $ctx, $body, $res);
+  }
+
   public function listByDraw(int $drawId, Request $req, Response $res): void
   {
     $includeInactive = $this->toBool($req->query('includeInactive', 'false'));
@@ -54,7 +74,11 @@ final class ParticipantController
   {
     $body = $req->json();
     if (!$body) throw new HttpException(400, 'BAD_JSON', 'JSON inválido o vacío');
+    $this->registerInternal($drawId, $ctx, $body, $res);
+  }
 
+  private function registerInternal(int $drawId, AuthContext $ctx, array $body, Response $res): void
+  {
     $actionNumber = (int)($body['actionNumber'] ?? 0);
     if ($actionNumber <= 0 || $actionNumber > 7000) {
       throw new HttpException(400, 'VALIDATION', 'actionNumber inválido (1..7000)');

@@ -64,12 +64,80 @@ $executionController = new ExecutionController($db);
 $winnerController = new WinnerController($db);
 $exportController = new ExportController($db);
 
+// Public landing: service user resolution for audit fields.
+// Priority:
+//  1) PUBLIC_WEB_SERVICE_USER_ID (numeric)
+//  2) PUBLIC_WEB_SERVICE_USERNAME (default: svc_web_registration) lookup in app_user
+function resolvePublicServiceUser(PDO $db): array
+{
+  $id = (int)($_ENV['PUBLIC_WEB_SERVICE_USER_ID'] ?? getenv('PUBLIC_WEB_SERVICE_USER_ID') ?? 0);
+  $username = (string)($_ENV['PUBLIC_WEB_SERVICE_USERNAME'] ?? getenv('PUBLIC_WEB_SERVICE_USERNAME') ?? 'svc_web_registration');
+  $username = trim($username) !== '' ? trim($username) : 'svc_web_registration';
+
+  if ($id > 0) return [$id, $username];
+
+  $st = $db->prepare("SELECT id, username FROM app_user WHERE username = ? AND (inactive_at IS NULL OR inactive_at > NOW()) LIMIT 1");
+  $st->execute([$username]);
+  $row = $st->fetch();
+  if ($row) return [(int)$row['id'], (string)$row['username']];
+
+  return [0, $username];
+}
+
 try {
   $routes = [
 
     // Health
     ['GET', '#^/v1/ping$#', function () use ($res) {
       $res->json(200, ['ok' => true, 'data' => ['pong' => true, 'ts' => gmdate('c')], 'error' => null]);
+    }],
+
+    // ==========================
+    // PUBLIC - Landing (no auth)
+    // ==========================
+
+    // List draws available for registration (server-side filter)
+    ['GET', '#^/v1/public/draws/for-registration$#', function () use ($db, $res) {
+      $now = gmdate('Y-m-d H:i:s');
+      $sql = "SELECT id, event_id, resource_type_id, participation_scope_id, name, resource_context,
+                     reg_open_at, reg_close_at, winners_count, pick_interval_seconds,
+                     use_start_date, use_end_date, status, active_from, inactive_at
+              FROM `draw`
+              WHERE status = 'REG_OPEN'
+                AND active_from <= ? AND (inactive_at IS NULL OR inactive_at > ?)
+                AND reg_open_at <= ? AND reg_close_at > ?
+              ORDER BY id DESC";
+      $st = $db->prepare($sql);
+      $st->execute([$now, $now, $now, $now]);
+      $rows = $st->fetchAll();
+
+      $items = array_map(function ($r) {
+        return [
+          'id' => (int)$r['id'],
+          'eventId' => (int)$r['event_id'],
+          'resourceTypeId' => (int)$r['resource_type_id'],
+          'participationScopeId' => (int)$r['participation_scope_id'],
+          'name' => $r['name'],
+          'resourceContext' => $r['resource_context'],
+          'regOpenAt' => $r['reg_open_at'],
+          'regCloseAt' => $r['reg_close_at'],
+          'winnersCount' => (int)$r['winners_count'],
+          'pickIntervalSeconds' => (int)$r['pick_interval_seconds'],
+          'useStartDate' => $r['use_start_date'],
+          'useEndDate' => $r['use_end_date'],
+          'status' => $r['status'],
+          'activeFrom' => $r['active_from'],
+          'inactiveAt' => $r['inactive_at'],
+        ];
+      }, $rows);
+
+      $res->json(200, ['ok' => true, 'data' => $items, 'error' => null]);
+    }],
+
+    // Register participant via public landing (channel forced to WEB)
+    ['POST', '#^/v1/public/draws/(?P<id>[0-9]+)/participants$#', function ($m) use ($participantController, $db, $req, $res) {
+      [$serviceUserId, $serviceUsername] = resolvePublicServiceUser($db);
+      $participantController->registerPublic((int)$m['id'], $serviceUserId, $serviceUsername, $req, $res);
     }],
 
     // Auth
