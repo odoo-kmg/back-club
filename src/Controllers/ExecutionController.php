@@ -92,7 +92,19 @@ final class ExecutionController
     if ($mode === 'AUTO') {
       $intervalSec = (int)$draw['pick_interval_seconds'];
       if ($intervalSec <= 0) $intervalSec = 2;
-      $result = $this->precomputeWinnersAuto($drawId, $executionId, $ctx->userId, $intervalSec);
+
+      try {
+        $result = $this->precomputeWinnersAuto($drawId, $executionId, $ctx->userId, $intervalSec);
+      } catch (\Throwable $e) {
+        // No dejar el sorteo colgado en EXECUTING si falla la programación inicial.
+        try {
+          $execRepo->markFinished($executionId, $ctx->userId);
+        } catch (\Throwable $ignore) {}
+        try {
+          $execRepo->updateDrawStatus($drawId, (string)$draw['status'], $ctx->userId);
+        } catch (\Throwable $ignore) {}
+        throw $e;
+      }
 
       $res->json(201, [
         'ok' => true,

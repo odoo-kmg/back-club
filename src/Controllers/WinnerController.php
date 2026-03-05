@@ -5,8 +5,8 @@ namespace App\Controllers;
 
 use App\Http\Request;
 use App\Http\Response;
-use App\Repositories\AuditEventRepository;
 use App\Repositories\DrawExecutionRepository;
+use App\Repositories\DrawRepository;
 use App\Repositories\DrawWinnerRepository;
 use App\Security\AuthContext;
 use PDO;
@@ -21,7 +21,13 @@ final class WinnerController
     $includeInactive = $this->toBool($req->query('includeInactive', 'false'));
     $visibleOnly = $this->toBool($req->query('visibleOnly', 'false'));
 
-    $this->tryAutoFinishIfNeeded($drawId, $ctx->userId);
+    // Best-effort: si ya están visibles todos los ganadores programados,
+    // persistimos FINISHED antes de responder. No debe romper el endpoint.
+    try {
+      $this->tryAutoFinishIfNeeded($drawId, $ctx->userId);
+    } catch (\Throwable $e) {
+      // no-op: listar winners debe seguir funcionando aunque falle el auto-finish
+    }
 
     $repo = new DrawWinnerRepository($this->db);
     $rows = $repo->listByDraw($drawId, $includeInactive, $visibleOnly);
@@ -47,45 +53,48 @@ final class WinnerController
 
   private function tryAutoFinishIfNeeded(int $drawId, int $actorUserId): void
   {
-    try {
-      $st = $this->db->prepare("SELECT status FROM draw WHERE id = ? LIMIT 1");
-      $st->execute([$drawId]);
-      $draw = $st->fetch();
-      if (!$draw) return;
-      if ((string)($draw['status'] ?? '') === 'FINISHED') return;
+    $drawRepo = new DrawRepository($this->db);
+    $execRepo = new DrawExecutionRepository($this->db);
+    $winnerRepo = new DrawWinnerRepository($this->db);
 
-      $execRepo = new DrawExecutionRepository($this->db);
-      $startedId = $execRepo->findStartedExecutionIdByDraw($drawId);
-      if ($startedId === null) return;
+    $draw = $drawRepo->getById($drawId);
+    if (!$draw) return;
 
-      $exec = $execRepo->getById($startedId);
-      if (!$exec) return;
-      if ((string)($exec['status'] ?? '') !== 'STARTED') return;
-      if (strtoupper((string)($exec['mode'] ?? '')) !== 'AUTO') return;
+    $drawStatus = (string)($draw['status'] ?? '');
+    if ($drawStatus === 'FINISHED') return;
+    if ($drawStatus !== 'EXECUTING') return;
 
-      $winnerRepo = new DrawWinnerRepository($this->db);
-      $maxRevealAt = $winnerRepo->getMaxRevealAtActiveByDraw($drawId);
-
-      if ($maxRevealAt === null || $winnerRepo->isRevealScheduleElapsed($drawId)) {
-        $execRepo->markFinished($startedId, $actorUserId);
-        $execRepo->updateDrawStatus($drawId, 'FINISHED', $actorUserId);
-
-        (new AuditEventRepository($this->db))->insert(
-          $actorUserId,
-          'EXEC_AUTO_FINISH',
-          'draw_execution',
-          $startedId,
-          [
-            'drawId' => $drawId,
-            'scheduleEndAt' => $maxRevealAt,
-            'reason' => $maxRevealAt === null ? 'NO_SCHEDULED_WINNERS' : 'SCHEDULE_ELAPSED',
-          ],
-          $actorUserId
-        );
-      }
-    } catch (\Throwable $e) {
+    $startedExecutionId = $execRepo->findStartedExecutionIdByDraw($drawId);
+    if ($startedExecutionId === null) {
       return;
     }
+
+    $totalActive = $winnerRepo->countActiveByDraw($drawId);
+    if ($totalActive <= 0) {
+      return;
+    }
+
+    $visibleActive = $winnerRepo->countVisibleActiveByDraw($drawId);
+    $maxRevealAt = $winnerRepo->getMaxRevealAtActiveByDraw($drawId);
+    $targetWinners = (int)($draw['winners_count'] ?? 0);
+
+    $allScheduledVisible = $visibleActive >= $totalActive;
+    $targetReached = $targetWinners > 0 ? ($totalActive >= $targetWinners && $visibleActive >= $targetWinners) : $allScheduledVisible;
+    $scheduleExpired = false;
+
+    if ($maxRevealAt !== null) {
+      $scheduleExpired = strcmp(gmdate('Y-m-d H:i:s'), $maxRevealAt) >= 0;
+    }
+
+    // Cierre determinístico:
+    // 1) si ya están visibles todos los ganadores programados
+    // 2) o si ya se alcanzó la meta de winners_count y todos están visibles
+    // 3) o si el schedule ya expiró y no queda nada oculto por revelar
+    $shouldFinish = $allScheduledVisible || $targetReached || ($scheduleExpired && $visibleActive >= $totalActive);
+    if (!$shouldFinish) return;
+
+    $execRepo->markFinished($startedExecutionId, $actorUserId);
+    $drawRepo->setStatus($drawId, 'FINISHED', $actorUserId);
   }
 
   private function toBool($v): bool

@@ -21,40 +21,34 @@ final class DrawWinnerRepository
     return (int)($st->fetch()['c'] ?? 0);
   }
 
-  public function getMaxRevealAtActiveByDraw(int $drawId): ?string
+  public function countVisibleActiveByDraw(int $drawId): int
   {
-    $st = $this->db->prepare("SELECT MAX(reveal_at) AS m
+    $st = $this->db->prepare("SELECT COUNT(1) AS c
                               FROM draw_winner
                               WHERE draw_id = ?
                                 AND inactive_at IS NULL
-                                AND reveal_at IS NOT NULL");
+                                AND (reveal_at IS NULL OR reveal_at <= UTC_TIMESTAMP())");
     $st->execute([$drawId]);
-    $row = $st->fetch();
-    $m = $row['m'] ?? null;
-    if ($m === null || $m === '') return null;
-    return (string)$m;
+    return (int)($st->fetch()['c'] ?? 0);
   }
 
-  public function isRevealScheduleElapsed(int $drawId): bool
+  public function getMaxRevealAtActiveByDraw(int $drawId): ?string
   {
-    $st = $this->db->prepare("SELECT CASE
-        WHEN MAX(reveal_at) IS NOT NULL AND UTC_TIMESTAMP() >= MAX(reveal_at) THEN 1
-        ELSE 0
-      END AS done
-      FROM draw_winner
-      WHERE draw_id = ?
-        AND inactive_at IS NULL
-        AND reveal_at IS NOT NULL");
+    $st = $this->db->prepare("SELECT MAX(reveal_at) AS max_reveal_at
+                              FROM draw_winner
+                              WHERE draw_id = ?
+                                AND inactive_at IS NULL");
     $st->execute([$drawId]);
-    return ((int)($st->fetch()['done'] ?? 0)) === 1;
+    $row = $st->fetch();
+    $v = $row['max_reveal_at'] ?? null;
+    return $v !== null && $v !== '' ? (string)$v : null;
   }
 
   /** @return array<int,array<string,mixed>> */
   public function listByDraw(int $drawId, bool $includeInactive, bool $visibleOnly = false): array
   {
     $sql = "SELECT id, draw_execution_id, draw_id, action_number, winner_order, selected_at,
-                   reveal_at,
-                   active_from, inactive_at, created_at, updated_at
+                   reveal_at, active_from, inactive_at, created_at, updated_at
             FROM draw_winner
             WHERE draw_id = ?";
     $vals = [$drawId];
@@ -71,41 +65,6 @@ final class DrawWinnerRepository
     $st = $this->db->prepare($sql);
     $st->execute($vals);
     return $st->fetchAll();
-  }
-
-  public function insertWinnerWithRevealAt(
-    int $executionId,
-    int $drawId,
-    int $actionNumber,
-    int $winnerOrder,
-    string $selectedAtUtc,
-    ?string $revealAtUtc,
-    int $actorUserId
-  ): int {
-    $sql = "INSERT INTO draw_winner (
-              draw_execution_id, draw_id,
-              action_number, winner_order, selected_at, reveal_at,
-              active_from, inactive_at,
-              created_at, updated_at, created_by, updated_by
-            ) VALUES (
-              ?, ?,
-              ?, ?, ?, ?,
-              ?, NULL,
-              NOW(), NOW(), ?, ?
-            )";
-    $st = $this->db->prepare($sql);
-    $st->execute([
-      $executionId,
-      $drawId,
-      $actionNumber,
-      $winnerOrder,
-      $selectedAtUtc,
-      $revealAtUtc,
-      $selectedAtUtc,
-      $actorUserId,
-      $actorUserId,
-    ]);
-    return (int)$this->db->lastInsertId();
   }
 
   /** @return array<int,int> actionNumbers */
@@ -148,6 +107,46 @@ final class DrawWinnerRepository
       $winnerOrder,
       $now,
       $now,
+      $actorUserId,
+      $actorUserId,
+    ]);
+    return (int)$this->db->lastInsertId();
+  }
+
+
+
+  public function insertWinnerWithRevealAt(
+    int $executionId,
+    int $drawId,
+    int $actionNumber,
+    int $winnerOrder,
+    string $selectedAtUtc,
+    string $revealAtUtc,
+    int $actorUserId
+  ): int
+  {
+    $sql = "INSERT INTO draw_winner (
+              draw_execution_id, draw_id,
+              action_number, winner_order, selected_at,
+              reveal_at,
+              active_from, inactive_at,
+              created_at, updated_at, created_by, updated_by
+            ) VALUES (
+              ?, ?,
+              ?, ?, ?,
+              ?,
+              ?, NULL,
+              NOW(), NOW(), ?, ?
+            )";
+    $st = $this->db->prepare($sql);
+    $st->execute([
+      $executionId,
+      $drawId,
+      $actionNumber,
+      $winnerOrder,
+      $selectedAtUtc,
+      $revealAtUtc,
+      $selectedAtUtc,
       $actorUserId,
       $actorUserId,
     ]);
