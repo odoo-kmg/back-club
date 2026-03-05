@@ -69,24 +69,43 @@ final class WinnerController
       return;
     }
 
+    // Auto-finish aplica SOLO a ejecuciones automáticas.
+    // Regla:
+    // 1) si execution.mode = AUTO => continuar
+    // 2) si execution.mode no viene / no es confiable, usar fallback por reveal_at:
+    //    - si hay maxRevealAt no nulo => es automático
+    //    - si maxRevealAt es null => no auto-finalizar (manual)
+    $exec = $execRepo->getById($startedExecutionId);
+    $mode = strtoupper((string)($exec['mode'] ?? ''));
+
+    // Fallback robusto: en AUTO los winners programados tienen reveal_at;
+    // en manual reveal_at es NULL.
+    $maxRevealAt = $winnerRepo->getMaxRevealAtActiveByDraw($drawId);
+
+    $isAutoExecution = ($mode === 'AUTO') || ($maxRevealAt !== null && $maxRevealAt !== '');
+
+    if (!$isAutoExecution) {
+        return;
+    }
+
     $totalActive = $winnerRepo->countActiveByDraw($drawId);
     if ($totalActive <= 0) {
       return;
     }
 
     $visibleActive = $winnerRepo->countVisibleActiveByDraw($drawId);
-    $maxRevealAt = $winnerRepo->getMaxRevealAtActiveByDraw($drawId);
+    // NO recalcular $maxRevealAt aquí; ya fue calculado arriba.
     $targetWinners = (int)($draw['winners_count'] ?? 0);
 
     $allScheduledVisible = $visibleActive >= $totalActive;
     $targetReached = $targetWinners > 0 ? ($totalActive >= $targetWinners && $visibleActive >= $targetWinners) : $allScheduledVisible;
     $scheduleExpired = false;
 
-    if ($maxRevealAt !== null) {
+    if ($maxRevealAt !== null && $maxRevealAt !== '') {
       $scheduleExpired = strcmp(gmdate('Y-m-d H:i:s'), $maxRevealAt) >= 0;
     }
 
-    // Cierre determinístico:
+    // Cierre determinístico (AUTO):
     // 1) si ya están visibles todos los ganadores programados
     // 2) o si ya se alcanzó la meta de winners_count y todos están visibles
     // 3) o si el schedule ya expiró y no queda nada oculto por revelar
