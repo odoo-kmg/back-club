@@ -21,23 +21,10 @@ final class WinnerController
     $includeInactive = $this->toBool($req->query('includeInactive', 'false'));
     $visibleOnly = $this->toBool($req->query('visibleOnly', 'false'));
 
-    $nowUtc = gmdate('Y-m-d H:i:s');
-
-    // === AUTO-FINISH (best-effort, triggered by polling) ===
-    // In shared hosting we don't have background workers, so we "finalize" an AUTO execution
-    // when the scheduled reveal window has elapsed.
-    $this->tryAutoFinishIfNeeded($drawId, $ctx->userId, $nowUtc);
+    $this->tryAutoFinishIfNeeded($drawId, $ctx->userId);
 
     $repo = new DrawWinnerRepository($this->db);
-    $rows = $repo->listByDraw($drawId, $includeInactive);
-
-    if ($visibleOnly) {
-      $rows = array_values(array_filter($rows, function ($r) use ($nowUtc) {
-        $revealAt = $r['reveal_at'] ?? null;
-        if ($revealAt === null || $revealAt === '') return true;
-        return ((string)$revealAt <= $nowUtc);
-      }));
-    }
+    $rows = $repo->listByDraw($drawId, $includeInactive, $visibleOnly);
 
     $items = array_map(function ($r) {
       return [
@@ -58,16 +45,14 @@ final class WinnerController
     $res->json(200, ['ok' => true, 'data' => $items, 'error' => null]);
   }
 
-  private function tryAutoFinishIfNeeded(int $drawId, int $actorUserId, string $nowUtc): void
+  private function tryAutoFinishIfNeeded(int $drawId, int $actorUserId): void
   {
     try {
-      // If draw is already FINISHED, do nothing.
       $st = $this->db->prepare("SELECT status FROM draw WHERE id = ? LIMIT 1");
       $st->execute([$drawId]);
       $draw = $st->fetch();
       if (!$draw) return;
-      $drawStatus = (string)($draw['status'] ?? '');
-      if ($drawStatus === 'FINISHED') return;
+      if ((string)($draw['status'] ?? '') === 'FINISHED') return;
 
       $execRepo = new DrawExecutionRepository($this->db);
       $startedId = $execRepo->findStartedExecutionIdByDraw($drawId);
@@ -81,8 +66,7 @@ final class WinnerController
       $winnerRepo = new DrawWinnerRepository($this->db);
       $maxRevealAt = $winnerRepo->getMaxRevealAtActiveByDraw($drawId);
 
-      // No scheduled winners => finish immediately (edge case: not enough participants).
-      if ($maxRevealAt === null) {
+      if ($maxRevealAt === null || $winnerRepo->isRevealScheduleElapsed($drawId)) {
         $execRepo->markFinished($startedId, $actorUserId);
         $execRepo->updateDrawStatus($drawId, 'FINISHED', $actorUserId);
 
@@ -91,28 +75,15 @@ final class WinnerController
           'EXEC_AUTO_FINISH',
           'draw_execution',
           $startedId,
-          ['drawId' => $drawId, 'reason' => 'NO_SCHEDULED_WINNERS'],
-          $actorUserId
-        );
-        return;
-      }
-
-      // Finish when the reveal schedule has elapsed.
-      if ($maxRevealAt <= $nowUtc) {
-        $execRepo->markFinished($startedId, $actorUserId);
-        $execRepo->updateDrawStatus($drawId, 'FINISHED', $actorUserId);
-
-        (new AuditEventRepository($this->db))->insert(
-          $actorUserId,
-          'EXEC_AUTO_FINISH',
-          'draw_execution',
-          $startedId,
-          ['drawId' => $drawId, 'scheduleEndAt' => $maxRevealAt],
+          [
+            'drawId' => $drawId,
+            'scheduleEndAt' => $maxRevealAt,
+            'reason' => $maxRevealAt === null ? 'NO_SCHEDULED_WINNERS' : 'SCHEDULE_ELAPSED',
+          ],
           $actorUserId
         );
       }
     } catch (\Throwable $e) {
-      // best-effort only: never break winners polling due to auto-finish failures
       return;
     }
   }

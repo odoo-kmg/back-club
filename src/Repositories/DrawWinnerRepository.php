@@ -21,10 +21,6 @@ final class DrawWinnerRepository
     return (int)($st->fetch()['c'] ?? 0);
   }
 
-  /**
-   * Returns the maximum reveal_at for active winners in a draw (AUTO schedule end).
-   * If winners were created without reveal_at, those rows are ignored.
-   */
   public function getMaxRevealAtActiveByDraw(int $drawId): ?string
   {
     $st = $this->db->prepare("SELECT MAX(reveal_at) AS m
@@ -39,8 +35,22 @@ final class DrawWinnerRepository
     return (string)$m;
   }
 
+  public function isRevealScheduleElapsed(int $drawId): bool
+  {
+    $st = $this->db->prepare("SELECT CASE
+        WHEN MAX(reveal_at) IS NOT NULL AND UTC_TIMESTAMP() >= MAX(reveal_at) THEN 1
+        ELSE 0
+      END AS done
+      FROM draw_winner
+      WHERE draw_id = ?
+        AND inactive_at IS NULL
+        AND reveal_at IS NOT NULL");
+    $st->execute([$drawId]);
+    return ((int)($st->fetch()['done'] ?? 0)) === 1;
+  }
+
   /** @return array<int,array<string,mixed>> */
-  public function listByDraw(int $drawId, bool $includeInactive): array
+  public function listByDraw(int $drawId, bool $includeInactive, bool $visibleOnly = false): array
   {
     $sql = "SELECT id, draw_execution_id, draw_id, action_number, winner_order, selected_at,
                    reveal_at,
@@ -48,18 +58,21 @@ final class DrawWinnerRepository
             FROM draw_winner
             WHERE draw_id = ?";
     $vals = [$drawId];
+
     if (!$includeInactive) {
       $sql .= " AND inactive_at IS NULL";
     }
+
+    if ($visibleOnly) {
+      $sql .= " AND (reveal_at IS NULL OR reveal_at <= UTC_TIMESTAMP())";
+    }
+
     $sql .= " ORDER BY winner_order ASC, selected_at ASC";
     $st = $this->db->prepare($sql);
     $st->execute($vals);
     return $st->fetchAll();
   }
 
-  /**
-   * Insert winner with a scheduled reveal timestamp (AUTO mode).
-   */
   public function insertWinnerWithRevealAt(
     int $executionId,
     int $drawId,
@@ -69,7 +82,6 @@ final class DrawWinnerRepository
     ?string $revealAtUtc,
     int $actorUserId
   ): int {
-    $now = $this->nowUtc();
     $sql = "INSERT INTO draw_winner (
               draw_execution_id, draw_id,
               action_number, winner_order, selected_at, reveal_at,
