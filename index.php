@@ -149,11 +149,31 @@ try {
       $authController->me($ctx, $res);
     }],
 
-    // Admin - Users
+    // Admin - Users / Roles
+    ['GET', '#^/v1/admin/users$#', function () use ($adminUserController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'SEC_USER_WRITE');
+      $adminUserController->listUsers($ctx, $req, $res);
+    }],
     ['POST', '#^/v1/admin/users$#', function () use ($adminUserController, $config, $db, $req, $res) {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'SEC_USER_WRITE');
       $adminUserController->createUser($ctx, $req, $res);
+    }],
+    ['PATCH', '#^/v1/admin/users/(?P<id>\d+)$#', function ($m) use ($adminUserController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'SEC_USER_WRITE');
+      $adminUserController->patchUser($ctx, (int)$m['id'], $req, $res);
+    }],
+    ['DELETE', '#^/v1/admin/users/(?P<id>\d+)$#', function ($m) use ($adminUserController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'SEC_USER_WRITE');
+      $adminUserController->deleteUser($ctx, (int)$m['id'], $res);
+    }],
+    ['GET', '#^/v1/admin/roles$#', function () use ($adminUserController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'SEC_USER_WRITE');
+      $adminUserController->listRoles($ctx, $req, $res);
     }],
 
     // ==========================

@@ -1,0 +1,48 @@
+<?php
+return [
+  'app' => [
+    'debug' => true,
+
+    // IMPORTANTE:
+    // Como la API vive en https://TU_DOMINIO/api/..., el base_path debe ser '/api'
+    'base_path' => '/api',
+  ],
+
+  'db' => [
+    'host' => '192.185.160.43',
+    'name' => 'oxtools4_dev',
+    'user' => 'oxtools4_dev',
+    'pass' => 'YzV2BtHRW?mr',
+    'charset' => 'utf8mb4',
+  ],
+
+  'jwt' => [
+    'secret' => 'eec2d31510adecbcbf0b4d39ff457ac1a630f6eb7270f44217203c5ea319bc19',
+    'issuer' => 'club-puerto-azul',
+    'audience' => 'club-puerto-azul-web',
+    'ttl_seconds' => 60 * 60 * 8,
+  ],
+
+'cors' => [
+  'allowed_origins' => [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+
+    // opcional (vite preview)
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+  ],
+  'allowed_headers' => ['Content-Type', 'Authorization', 'X-API-Key'],
+  'allowed_methods' => ['GET', 'POST', 'PATCH', 'OPTIONS'],
+],
+
+  // API keys para integraciones externas (NO usar en el browser)
+  'api_keys' => [
+    // 'botmaker' => 'CHANGE_ME',
+  ],
+
+  // Token para herramientas temporales (hash.php). Cambia y luego borras tools/hash.php
+  'tools' => [
+    'hash_token' => 'f61562105657fdcdcb1c08f88d4632d84e4d8294dc99ed8883cef46b17dde484',
+  ],
+];

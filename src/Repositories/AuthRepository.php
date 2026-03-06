@@ -15,6 +15,21 @@ final class AuthRepository
     return gmdate('Y-m-d H:i:s');
   }
 
+  private function roleHasNameColumn(): bool
+  {
+    static $cached = null;
+    if ($cached !== null) return $cached;
+
+    try {
+      $st = $this->db->query("SHOW COLUMNS FROM role LIKE 'name'");
+      $cached = (bool)$st->fetch();
+      return $cached;
+    } catch (\Throwable $e) {
+      $cached = false;
+      return false;
+    }
+  }
+
   public function findActiveUserByUsername(string $username): ?array
   {
     $now = $this->nowUtc();
@@ -53,6 +68,14 @@ final class AuthRepository
     return $row ?: null;
   }
 
+  public function findUserById(int $id): ?array
+  {
+    $st = $this->db->prepare("SELECT id, username, full_name, email, active_from, inactive_at FROM app_user WHERE id = ? LIMIT 1");
+    $st->execute([$id]);
+    $row = $st->fetch();
+    return $row ?: null;
+  }
+
   /** @return string[] */
   public function getActiveRoleCodesForUser(int $userId): array
   {
@@ -72,6 +95,32 @@ final class AuthRepository
     $rows = $st->fetchAll();
 
     return array_values(array_unique(array_map(fn($x) => $x['code'], $rows)));
+  }
+
+  /** @return array<int,array{code:string,name:string}> */
+  public function getActiveRolesForUser(int $userId): array
+  {
+    $now = $this->nowUtc();
+    $nameExpr = $this->roleHasNameColumn() ? 'COALESCE(r.name, r.code)' : 'r.code';
+
+    $sql = "
+      SELECT r.code, {$nameExpr} AS role_name
+      FROM user_role ur
+      JOIN role r ON r.id = ur.role_id
+      WHERE ur.user_id = ?
+        AND ur.active_from <= ? AND (ur.inactive_at IS NULL OR ur.inactive_at > ?)
+        AND r.active_from  <= ? AND (r.inactive_at  IS NULL OR r.inactive_at  > ?)
+      ORDER BY role_name ASC
+    ";
+
+    $st = $this->db->prepare($sql);
+    $st->execute([$userId, $now, $now, $now, $now]);
+    $rows = $st->fetchAll() ?: [];
+
+    return array_map(fn($r) => [
+      'code' => (string)$r['code'],
+      'name' => (string)$r['role_name'],
+    ], $rows);
   }
 
   /** @return string[] */
@@ -165,5 +214,88 @@ final class AuthRepository
       )
     ");
     $st2->execute([$userId, $role['id'], $actorUserId, $actorUserId]);
+  }
+
+  /** @return array<int,array<string,mixed>> */
+  public function listUsers(bool $includeInactive = false): array
+  {
+    $sql = "
+      SELECT id, username, full_name, email, active_from, inactive_at
+      FROM app_user
+    ";
+    if (!$includeInactive) {
+      $sql .= " WHERE inactive_at IS NULL OR inactive_at > NOW() ";
+    }
+    $sql .= " ORDER BY username ASC ";
+
+    $rows = $this->db->query($sql)->fetchAll() ?: [];
+    foreach ($rows as &$row) {
+      $row['roles'] = $this->getActiveRolesForUser((int)$row['id']);
+    }
+    unset($row);
+
+    return $rows;
+  }
+
+  /** @return array<int,array{code:string,name:string}> */
+  public function listRoles(bool $includeInactive = false): array
+  {
+    $nameExpr = $this->roleHasNameColumn() ? 'COALESCE(name, code)' : 'code';
+    $sql = "SELECT id, code, {$nameExpr} AS role_name, active_from, inactive_at FROM role";
+    if (!$includeInactive) {
+      $sql .= " WHERE inactive_at IS NULL OR inactive_at > NOW() ";
+    }
+    $sql .= " ORDER BY role_name ASC ";
+
+    $rows = $this->db->query($sql)->fetchAll() ?: [];
+    return array_map(fn($r) => [
+      'id' => (int)$r['id'],
+      'code' => (string)$r['code'],
+      'name' => (string)$r['role_name'],
+      'activeFrom' => $r['active_from'],
+      'inactiveAt' => $r['inactive_at'],
+    ], $rows);
+  }
+
+  public function patchUser(int $id, array $fields, int $actorUserId): void
+  {
+    if (count($fields) === 0) return;
+
+    $sets = [];
+    $params = [];
+    foreach ($fields as $col => $val) {
+      $sets[] = "{$col} = ?";
+      $params[] = $val;
+    }
+    $sets[] = "updated_at = NOW()";
+    $sets[] = "updated_by = ?";
+    $params[] = $actorUserId;
+    $params[] = $id;
+
+    $sql = "UPDATE app_user SET " . implode(', ', $sets) . " WHERE id = ?";
+    $st = $this->db->prepare($sql);
+    $st->execute($params);
+  }
+
+  public function deactivateActiveUserRoles(int $userId, int $actorUserId): void
+  {
+    $st = $this->db->prepare("
+      UPDATE user_role
+      SET inactive_at = NOW(), updated_at = NOW(), updated_by = ?
+      WHERE user_id = ?
+        AND (inactive_at IS NULL OR inactive_at > NOW())
+    ");
+    $st->execute([$actorUserId, $userId]);
+  }
+
+  public function deactivateUser(int $id, int $actorUserId): void
+  {
+    $st = $this->db->prepare("
+      UPDATE app_user
+      SET inactive_at = NOW(), updated_at = NOW(), updated_by = ?
+      WHERE id = ?
+        AND (inactive_at IS NULL OR inactive_at > NOW())
+    ");
+    $st->execute([$actorUserId, $id]);
   }
 }
