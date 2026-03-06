@@ -52,7 +52,7 @@ final class ResourceTypeController
       $res->json(201, ['ok' => true, 'data' => ['id' => $id], 'error' => null]);
     } catch (\PDOException $e) {
       if ((int)($e->errorInfo[1] ?? 0) === 1062) {
-        throw new HttpException(409, 'DUPLICATE', 'code ya existe');
+        throw new HttpException(409, 'DUPLICATE', 'Código duplicado');
       }
       throw $e;
     }
@@ -84,7 +84,7 @@ final class ResourceTypeController
       $res->json(200, ['ok' => true, 'data' => ['id' => $id], 'error' => null]);
     } catch (\PDOException $e) {
       if ((int)($e->errorInfo[1] ?? 0) === 1062) {
-        throw new HttpException(409, 'DUPLICATE', 'code ya existe');
+        throw new HttpException(409, 'DUPLICATE', 'Código duplicado');
       }
       throw $e;
     }
