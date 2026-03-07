@@ -9,7 +9,9 @@ final class ImportRepository
 {
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   public function createImport(array $data, int $actorUserId): int
   {
@@ -25,7 +27,7 @@ final class ImportRepository
               NOW(), NOW(), ?, ?
             )";
     $st = $this->db->prepare($sql);
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $st->execute([
       (string)$data['import_type'],
       (string)$data['original_filename'],

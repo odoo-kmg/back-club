@@ -10,12 +10,14 @@ final class DrawRepository
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
 
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   /** @return array<int, array<string,mixed>> */
   public function list(array $filters, bool $includeInactive = false): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     $where = [];
     $vals = [];

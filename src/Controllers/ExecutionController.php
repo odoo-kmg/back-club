@@ -35,7 +35,7 @@ final class ExecutionController
     $draw = $drawRepo->getById($drawId);
     if (!$draw) throw new HttpException(404, 'NOT_FOUND', 'Sorteo no existe');
 
-    $now = gmdate('Y-m-d H:i:s');
+    $now = date('Y-m-d H:i:s');
     if (!$this->isActiveNow((string)$draw['active_from'], $draw['inactive_at'], $now)) {
       throw new HttpException(422, 'DRAW_INACTIVE', 'Sorteo inactivo');
     }
@@ -195,7 +195,7 @@ final class ExecutionController
     // ensure no parallel started execution remains
     $execRepo->finishAllStartedByDraw($drawId, $ctx->userId);
 
-    $now = gmdate('Y-m-d H:i:s');
+    $now = date('Y-m-d H:i:s');
     $snapshot = json_encode([
       'drawId' => $drawId,
       'restartReason' => $reason,
@@ -315,7 +315,7 @@ final class ExecutionController
           'data' => [
             'winnerOrder' => $winnerOrder,
             'actionNumber' => $picked,
-            'selectedAt' => gmdate('Y-m-d H:i:s'),
+            'selectedAt' => date('Y-m-d H:i:s'),
           ],
           'error' => null,
         ]);
@@ -470,8 +470,8 @@ final class ExecutionController
     if (count($eligible) === 0) {
       return [
         'scheduledWinners' => 0,
-        'scheduleStartAt' => gmdate('Y-m-d H:i:s'),
-        'scheduleEndAt' => gmdate('Y-m-d H:i:s'),
+        'scheduleStartAt' => date('Y-m-d H:i:s'),
+        'scheduleEndAt' => date('Y-m-d H:i:s'),
       ];
     }
 
@@ -486,7 +486,7 @@ final class ExecutionController
     }
 
     $pickedList = array_slice($eligible, 0, min($winnersCount, count($eligible)));
-    $nowUtc = gmdate('Y-m-d H:i:s');
+    $nowUtc = date('Y-m-d H:i:s');
     $scheduleStartAt = $nowUtc;
 
     $this->db->beginTransaction();
@@ -494,7 +494,7 @@ final class ExecutionController
       $scheduled = 0;
       foreach ($pickedList as $idx => $actionNumber) {
         $winnerOrder = $idx + 1;
-        $revealAt = gmdate('Y-m-d H:i:s', time() + (($winnerOrder - 1) * $intervalSeconds));
+        $revealAt = date('Y-m-d H:i:s', time() + (($winnerOrder - 1) * $intervalSeconds));
         $winnerId = $winnerRepo->insertWinnerWithRevealAt(
           $executionId,
           $drawId,
@@ -525,7 +525,7 @@ final class ExecutionController
       $this->db->commit();
 
       $scheduleEndAt = $scheduled > 0
-        ? gmdate('Y-m-d H:i:s', time() + (($scheduled - 1) * $intervalSeconds))
+        ? date('Y-m-d H:i:s', time() + (($scheduled - 1) * $intervalSeconds))
         : $scheduleStartAt;
 
       return [

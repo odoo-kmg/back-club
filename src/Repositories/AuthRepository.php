@@ -12,7 +12,12 @@ final class AuthRepository
 
   private function nowUtc(): string
   {
-    return gmdate('Y-m-d H:i:s');
+    return date('Y-m-d H:i:s');
+  }
+
+  private function nowVE(): string
+  {
+    return $this->nowUtc();
   }
 
   private function roleHasNameColumn(): bool
@@ -32,7 +37,7 @@ final class AuthRepository
 
   public function findActiveUserByUsername(string $username): ?array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     $sql = "
       SELECT id, username, password_hash, full_name
@@ -51,7 +56,7 @@ final class AuthRepository
 
   public function findActiveUserById(int $id): ?array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     $sql = "
       SELECT id, username, full_name
@@ -79,7 +84,7 @@ final class AuthRepository
   /** @return string[] */
   public function getActiveRoleCodesForUser(int $userId): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     $sql = "
       SELECT r.code
@@ -100,7 +105,7 @@ final class AuthRepository
   /** @return array<int,array{code:string,name:string}> */
   public function getActiveRolesForUser(int $userId): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $nameExpr = $this->roleHasNameColumn() ? 'COALESCE(r.name, r.code)' : 'r.code';
 
     $sql = "
@@ -126,7 +131,7 @@ final class AuthRepository
   /** @return string[] */
   public function getActivePermissionCodesForUser(int $userId): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     $sql = "
       SELECT p.code
@@ -185,7 +190,7 @@ final class AuthRepository
 
   public function assignRoleToUserByCode(int $userId, string $roleCode, int $actorUserId): void
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     $st = $this->db->prepare("
       SELECT id

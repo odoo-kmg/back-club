@@ -10,12 +10,14 @@ final class EligibilityRangeRepository
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
 
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   /** @return array<int, array<string,mixed>> */
   public function listByDraw(int $drawId, bool $includeInactive = false): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     if ($includeInactive) {
       $sql = "SELECT id, draw_id, range_from_action, range_to_action, label, active_from, inactive_at, created_at, updated_at
               FROM draw_eligibility_range

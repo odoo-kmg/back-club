@@ -43,7 +43,7 @@ final class EventController
     $startDate = isset($body['startDate']) ? $this->toDate($body['startDate']) : null;
     $endDate   = isset($body['endDate']) ? $this->toDate($body['endDate']) : null;
 
-    $activeFrom = isset($body['activeFrom']) ? $this->toDateTime($body['activeFrom']) : gmdate('Y-m-d H:i:s');
+    $activeFrom = isset($body['activeFrom']) ? $this->toDateTime($body['activeFrom']) : date('Y-m-d H:i:s');
     $inactiveAt = array_key_exists('inactiveAt', $body) ? $this->nullableDateTime($body['inactiveAt']) : null;
 
     $repo = new EventRepository($this->db);

@@ -52,7 +52,7 @@ final class ExportController
     $res->json(200, [
       'ok' => true,
       'data' => [
-        'generatedAt' => gmdate('c'),
+        'generatedAt' => date('c'),
         'draw' => [
           'id' => (int)$draw['id'],
           'name' => (string)$draw['name'],

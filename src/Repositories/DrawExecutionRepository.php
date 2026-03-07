@@ -9,7 +9,9 @@ final class DrawExecutionRepository
 {
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   public function getById(int $id): ?array
   {
@@ -46,7 +48,7 @@ final class DrawExecutionRepository
    */
   public function finishAllStartedByDraw(int $drawId, int $actorUserId): int
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $st = $this->db->prepare("UPDATE draw_execution
                               SET status = 'FINISHED',
                                   ended_at = ?,
@@ -61,7 +63,7 @@ final class DrawExecutionRepository
 
   public function create(int $drawId, string $mode, ?int $baseExecutionId, int $executedByUserId, string $configSnapshotJson): int
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     $sql = "INSERT INTO draw_execution (
               draw_id,
@@ -99,7 +101,7 @@ final class DrawExecutionRepository
 
   public function markFinished(int $executionId, int $actorUserId): void
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $sql = "UPDATE draw_execution
             SET status = 'FINISHED',
                 ended_at = ?,

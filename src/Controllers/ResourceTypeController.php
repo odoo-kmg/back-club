@@ -35,7 +35,7 @@ final class ResourceTypeController
 
     if ($code === '' || $name === '') throw new HttpException(400, 'VALIDATION', 'code y name son requeridos');
 
-    $activeFrom = isset($body['activeFrom']) ? $this->toDateTime($body['activeFrom']) : gmdate('Y-m-d H:i:s');
+    $activeFrom = isset($body['activeFrom']) ? $this->toDateTime($body['activeFrom']) : date('Y-m-d H:i:s');
     $inactiveAt = array_key_exists('inactiveAt', $body) ? $this->nullableDateTime($body['inactiveAt']) : null;
 
     $repo = new ResourceTypeRepository($this->db);
@@ -114,9 +114,10 @@ final class ResourceTypeController
   {
     $s = trim((string)$v);
     $s = str_replace('T', ' ', $s);
-    $s = str_replace('Z', '', $s);
+    $s = preg_replace('/(Z|[+-]\d{2}:?\d{2})$/', '', $s);
+    if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $s)) return $s . ':00';
     if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $s)) return $s;
-    throw new HttpException(400, 'VALIDATION', 'Fecha-hora inválida (YYYY-MM-DDTHH:MM:SSZ)');
+    throw new HttpException(400, 'VALIDATION', 'Fecha-hora inválida (use YYYY-MM-DD HH:MM[:SS] o YYYY-MM-DDTHH:MM[:SS])');
   }
 
   private function nullableDateTime($v): ?string

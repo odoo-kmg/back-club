@@ -9,7 +9,9 @@ final class DrawWinnerRepository
 {
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   public function countActiveByDraw(int $drawId): int
   {
@@ -27,7 +29,7 @@ final class DrawWinnerRepository
                               FROM draw_winner
                               WHERE draw_id = ?
                                 AND inactive_at IS NULL
-                                AND (reveal_at IS NULL OR reveal_at <= UTC_TIMESTAMP())");
+                                AND (reveal_at IS NULL OR reveal_at <= NOW())");
     $st->execute([$drawId]);
     return (int)($st->fetch()['c'] ?? 0);
   }
@@ -58,7 +60,7 @@ final class DrawWinnerRepository
     }
 
     if ($visibleOnly) {
-      $sql .= " AND (reveal_at IS NULL OR reveal_at <= UTC_TIMESTAMP())";
+      $sql .= " AND (reveal_at IS NULL OR reveal_at <= NOW())";
     }
 
     $sql .= " ORDER BY winner_order ASC, selected_at ASC";
@@ -87,7 +89,7 @@ final class DrawWinnerRepository
 
   public function insertWinner(int $executionId, int $drawId, int $actionNumber, int $winnerOrder, int $actorUserId): int
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $sql = "INSERT INTO draw_winner (
               draw_execution_id, draw_id,
               action_number, winner_order, selected_at,
@@ -155,7 +157,7 @@ final class DrawWinnerRepository
 
   public function inactivateActiveWinnersByDraw(int $drawId, int $actorUserId): int
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $sql = "UPDATE draw_winner
             SET inactive_at = ?,
                 updated_at = NOW(),

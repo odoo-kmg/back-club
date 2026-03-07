@@ -95,7 +95,7 @@ final class ParticipantController
     $email = $this->nullableTrim($person['email'] ?? null);
     $phone = $this->nullableTrim($person['phoneE164'] ?? null);
 
-    $now = gmdate('Y-m-d H:i:s');
+    $now = date('Y-m-d H:i:s');
 
     // Validate draw exists and is open for registration
     $drawRepo = new DrawRepository($this->db);
@@ -194,7 +194,7 @@ final class ParticipantController
       return;
     }
 
-    $now = gmdate('Y-m-d H:i:s');
+    $now = date('Y-m-d H:i:s');
     $repo->cancel($participantId, $reason, $ctx->userId, $now);
 
     $res->json(200, ['ok' => true, 'data' => ['id' => $participantId, 'status' => 'CANCELED'], 'error' => null]);

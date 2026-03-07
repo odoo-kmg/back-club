@@ -9,12 +9,14 @@ final class ActionBlockRepository
 {
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   /** @return array<int, array<string,mixed>> */
   public function list(array $filters, bool $includeInactive): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $where = [];
     $vals = [];
 
@@ -62,7 +64,7 @@ final class ActionBlockRepository
 
   public function findActiveBlock(int $actionNumber, string $scopeType, ?int $scopeDrawId): ?array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $sql = "SELECT id, action_number, scope_type, scope_draw_id, reason, active_from, inactive_at
             FROM action_block
             WHERE action_number = ?
@@ -167,7 +169,7 @@ final class ActionBlockRepository
 
   public function isActionBlocked(int $actionNumber, int $drawId): bool
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     // GLOBAL blocks
     $sqlGlobal = "SELECT id

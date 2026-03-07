@@ -57,7 +57,7 @@ final class ImportController
     $importId = $importRepo->createImport([
       'import_type' => 'ACTION_BLOCK',
       'original_filename' => $name,
-      'uploaded_at' => gmdate('Y-m-d H:i:s'),
+      'uploaded_at' => date('Y-m-d H:i:s'),
       'uploaded_by_user_id' => $ctx->userId,
       'process_status' => 'PENDING',
       'notes' => null,
@@ -145,7 +145,7 @@ final class ImportController
           throw new HttpException(400, 'VALIDATION', 'reason requerido');
         }
 
-        $now = gmdate('Y-m-d H:i:s');
+        $now = date('Y-m-d H:i:s');
 
         if ($operation === 'BLOCK') {
           $existing = $blockRepo->findActiveBlock($actionNumber, $scopeType, $scopeDrawId);
@@ -195,7 +195,7 @@ final class ImportController
         'reason' => $reason,
         'result_status' => $status,
         'error_message' => $errorMessage,
-        'active_from' => gmdate('Y-m-d H:i:s'),
+        'active_from' => date('Y-m-d H:i:s'),
       ], $ctx->userId);
     }
 

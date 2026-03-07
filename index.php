@@ -28,7 +28,7 @@ use App\Controllers\ImportController;
 use App\Controllers\ExecutionController;
 use App\Controllers\WinnerController;
 use App\Controllers\ExportController;
-
+date_default_timezone_set('America/Caracas');
 $config = Config::load(__DIR__ . '/config');
 $db = Db::pdo($config);
 
@@ -89,7 +89,7 @@ try {
 
     // Health
     ['GET', '#^/v1/ping$#', function () use ($res) {
-      $res->json(200, ['ok' => true, 'data' => ['pong' => true, 'ts' => gmdate('c')], 'error' => null]);
+      $res->json(200, ['ok' => true, 'data' => ['pong' => true, 'ts' => date('c')], 'error' => null]);
     }],
 
     // ==========================
@@ -98,7 +98,7 @@ try {
 
     // List draws available for registration (server-side filter)
     ['GET', '#^/v1/public/draws/for-registration$#', function () use ($db, $res) {
-      $now = gmdate('Y-m-d H:i:s');
+      $now = date('Y-m-d H:i:s');
       $sql = "SELECT id, event_id, resource_type_id, participation_scope_id, name, resource_context,
                      reg_open_at, reg_close_at, winners_count, pick_interval_seconds,
                      use_start_date, use_end_date, status, active_from, inactive_at

@@ -82,7 +82,7 @@ final class ActionBlockController
     $reason = trim((string)($body['reason'] ?? ''));
     if ($reason === '') throw new HttpException(400, 'VALIDATION', 'reason es requerido');
 
-    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : gmdate('Y-m-d H:i:s');
+    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : date('Y-m-d H:i:s');
     $inactiveAt = array_key_exists('inactiveAt', $body) ? $this->nullableDateTime($body['inactiveAt']) : null;
 
     $repo = new ActionBlockRepository($this->db);
@@ -103,7 +103,7 @@ final class ActionBlockController
       'inactive_at' => $inactiveAt,
     ], $ctx->userId);
 
-    $repo->logAudit($id, 'BLOCK', $reason, gmdate('Y-m-d H:i:s'), null, $ctx->userId);
+    $repo->logAudit($id, 'BLOCK', $reason, date('Y-m-d H:i:s'), null, $ctx->userId);
 
     $res->json(201, ['ok' => true, 'data' => ['id' => $id], 'error' => null]);
   }
@@ -127,7 +127,7 @@ final class ActionBlockController
     $repo->patch($id, $fields, $ctx->userId);
 
     $reasonForAudit = $fields['reason'] ?? 'PATCH';
-    $repo->logAudit($id, 'UPDATE_REASON', (string)$reasonForAudit, gmdate('Y-m-d H:i:s'), null, $ctx->userId);
+    $repo->logAudit($id, 'UPDATE_REASON', (string)$reasonForAudit, date('Y-m-d H:i:s'), null, $ctx->userId);
 
     $res->json(200, ['ok' => true, 'data' => ['id' => $id], 'error' => null]);
   }
@@ -149,7 +149,7 @@ final class ActionBlockController
       return;
     }
 
-    $now = gmdate('Y-m-d H:i:s');
+    $now = date('Y-m-d H:i:s');
     $repo->unblock($id, $now, $ctx->userId);
     $repo->logAudit($id, 'UNBLOCK', $reason, $now, null, $ctx->userId);
 
@@ -182,9 +182,10 @@ final class ActionBlockController
   {
     $s = trim((string)$v);
     $s = str_replace('T', ' ', $s);
-    $s = str_replace('Z', '', $s);
+    $s = preg_replace('/(Z|[+-]\d{2}:?\d{2})$/', '', $s);
+    if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $s)) return $s . ':00';
     if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $s)) return $s;
-    throw new HttpException(400, 'VALIDATION', 'Fecha-hora inválida (YYYY-MM-DDTHH:MM:SSZ)');
+    throw new HttpException(400, 'VALIDATION', 'Fecha-hora inválida (use YYYY-MM-DD HH:MM[:SS] o YYYY-MM-DDTHH:MM[:SS])');
   }
 
   private function nullableDateTime($v): ?string

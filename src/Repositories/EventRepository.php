@@ -10,12 +10,14 @@ final class EventRepository
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
 
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   /** @return array<int, array<string,mixed>> */
   public function list(bool $includeInactive = false): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
 
     if ($includeInactive) {
       $sql = "SELECT id, code, name, start_date, end_date, active_from, inactive_at, created_at, updated_at

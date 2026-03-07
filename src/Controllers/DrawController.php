@@ -82,7 +82,7 @@ final class DrawController
     $status = isset($body['status']) ? trim((string)$body['status']) : 'DRAFT';
     if ($status === '') $status = 'DRAFT';
 
-    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : gmdate('Y-m-d H:i:s');
+    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : date('Y-m-d H:i:s');
     $inactiveAt = array_key_exists('inactiveAt', $body) ? $this->nullableDateTime($body['inactiveAt']) : null;
 
     $repo = new DrawRepository($this->db);
@@ -158,7 +158,7 @@ final class DrawController
 
     $body = $req->json() ?? [];
     $force = $this->toBool($body['force'] ?? 'false');
-    $now = gmdate('Y-m-d H:i:s');
+    $now = date('Y-m-d H:i:s');
 
     // Must be active
     if (!($draw['active_from'] <= $now && ($draw['inactive_at'] === null || $draw['inactive_at'] > $now))) {
@@ -219,7 +219,7 @@ final class DrawController
     }
 
     $label = array_key_exists('label', $body) ? $this->nullableString($body['label']) : null;
-    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : gmdate('Y-m-d H:i:s');
+    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : date('Y-m-d H:i:s');
     $inactiveAt = array_key_exists('inactiveAt', $body) ? $this->nullableDateTime($body['inactiveAt']) : null;
 
     $repo = new EligibilityRangeRepository($this->db);
@@ -268,7 +268,7 @@ final class DrawController
     // Ensure target draw exists
     if (!$drawRepo->getById($target)) throw new HttpException(409, 'FK_CONSTRAINT', 'targetDrawId no existe');
 
-    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : gmdate('Y-m-d H:i:s');
+    $activeFrom = array_key_exists('activeFrom', $body) ? $this->toDateTime($body['activeFrom']) : date('Y-m-d H:i:s');
     $inactiveAt = array_key_exists('inactiveAt', $body) ? $this->nullableDateTime($body['inactiveAt']) : null;
 
     $repo = new ExclusionRuleRepository($this->db);
@@ -377,9 +377,10 @@ final class DrawController
     if ($v === null || $v === '') throw new HttpException(400, 'VALIDATION', $msg);
     $s = trim((string)$v);
     $s = str_replace('T', ' ', $s);
-    $s = str_replace('Z', '', $s);
+    $s = preg_replace('/(Z|[+-]\d{2}:?\d{2})$/', '', $s);
+    if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $s)) return $s . ':00';
     if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $s)) return $s;
-    throw new HttpException(400, 'VALIDATION', 'Fecha-hora inválida (YYYY-MM-DDTHH:MM:SSZ)');
+    throw new HttpException(400, 'VALIDATION', 'Fecha-hora inválida (use YYYY-MM-DD HH:MM[:SS] o YYYY-MM-DDTHH:MM[:SS])');
   }
 
   private function nullableDateTime($v): ?string

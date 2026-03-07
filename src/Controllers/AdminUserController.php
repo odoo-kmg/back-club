@@ -80,7 +80,7 @@ final class AdminUserController
         'password_hash' => $hash,
         'full_name' => $fullName,
         'email' => $email,
-        'active_from' => gmdate('Y-m-d H:i:s'),
+        'active_from' => date('Y-m-d H:i:s'),
         'inactive_at' => null,
       ], $ctx->userId);
 

@@ -10,7 +10,7 @@ final class DrawParticipantRepository
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
 
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
 
   public function hasActiveParticipantInScope(int $scopeId, int $actionNumber): bool
   {

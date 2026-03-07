@@ -9,12 +9,14 @@ final class DrawExclusionRepository
 {
   private PDO $db;
   public function __construct(PDO $db) { $this->db = $db; }
-  private function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
+  private function nowUtc(): string { return date('Y-m-d H:i:s'); }
+
+  private function nowVE(): string { return $this->nowUtc(); }
 
   /** @return array<int,array{rule_type:string,source_draw_id:int,target_draw_id:int}> */
   public function listActiveByTarget(int $targetDrawId): array
   {
-    $now = $this->nowUtc();
+    $now = $this->nowVE();
     $sql = "SELECT rule_type, source_draw_id, target_draw_id
             FROM draw_exclusion_rule
             WHERE target_draw_id = ?

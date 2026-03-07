@@ -102,7 +102,7 @@ final class WinnerController
     $scheduleExpired = false;
 
     if ($maxRevealAt !== null && $maxRevealAt !== '') {
-      $scheduleExpired = strcmp(gmdate('Y-m-d H:i:s'), $maxRevealAt) >= 0;
+      $scheduleExpired = strcmp(date('Y-m-d H:i:s'), $maxRevealAt) >= 0;
     }
 
     // Cierre determinístico (AUTO):
