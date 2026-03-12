@@ -23,6 +23,7 @@ use App\Controllers\ExclusionController;
 use App\Controllers\ParticipantController;
 use App\Controllers\ActionBlockController;
 use App\Controllers\ImportController;
+use App\Controllers\ShareholderController;
 
 // Fase 4
 use App\Controllers\ExecutionController;
@@ -58,6 +59,7 @@ $exclusionController = new ExclusionController($db);
 $participantController = new ParticipantController($db);
 $actionBlockController = new ActionBlockController($db);
 $importController = new ImportController($db);
+$shareholderController = new ShareholderController($db);
 
 // Fase 4
 $executionController = new ExecutionController($db);
@@ -226,6 +228,43 @@ try {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'CFG_SCOPE_WRITE');
       $scopeController->patch($ctx, (int)$m['id'], $req, $res);
+    }],
+
+    // Shareholders
+    ['GET', '#^/v1/shareholders$#', function () use ($shareholderController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_RESOURCE_READ');
+      $shareholderController->list($req, $res);
+    }],
+    ['POST', '#^/v1/shareholders$#', function () use ($shareholderController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_RESOURCE_WRITE');
+      $shareholderController->create($ctx, $req, $res);
+    }],
+    ['PATCH', '#^/v1/shareholders/(?P<id>\d+)$#', function ($m) use ($shareholderController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_RESOURCE_WRITE');
+      $shareholderController->patch($ctx, (int)$m['id'], $req, $res);
+    }],
+    ['DELETE', '#^/v1/shareholders/(?P<id>\d+)$#', function ($m) use ($shareholderController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_RESOURCE_WRITE');
+      $shareholderController->delete($ctx, (int)$m['id'], $res);
+    }],
+    ['POST', '#^/v1/shareholders/imports$#', function () use ($shareholderController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_RESOURCE_WRITE');
+      $shareholderController->importCsv($ctx, $req, $res);
+    }],
+    ['GET', '#^/v1/shareholders/imports/(?P<id>\d+)$#', function ($m) use ($shareholderController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_RESOURCE_READ');
+      $shareholderController->getImport((int)$m['id'], $res);
+    }],
+    ['GET', '#^/v1/shareholders/imports/(?P<id>\d+)/rows$#', function ($m) use ($shareholderController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'CFG_RESOURCE_READ');
+      $shareholderController->listImportRows((int)$m['id'], $req, $res);
     }],
 
     // ==========================

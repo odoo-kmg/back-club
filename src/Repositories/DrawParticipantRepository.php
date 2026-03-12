@@ -31,6 +31,7 @@ final class DrawParticipantRepository
               draw_id, participation_scope_id,
               action_number, channel, status,
               first_name, last_name, email, phone_e164,
+              document_type, document_number, document_key,
               registered_at, registered_by_user_id,
               cancel_reason, canceled_by_user_id,
               active_from, inactive_at,
@@ -39,6 +40,7 @@ final class DrawParticipantRepository
               ?, ?,
               ?, ?, ?,
               ?, ?, ?, ?,
+              ?, ?, ?,
               ?, ?,
               NULL, NULL,
               ?, NULL,
@@ -56,6 +58,9 @@ final class DrawParticipantRepository
       $data['last_name'],
       $data['email'],
       $data['phone_e164'],
+      $data['document_type'],
+      $data['document_number'],
+      $data['document_key'],
       (string)$data['registered_at'],
       $data['registered_by_user_id'],
       (string)$data['active_from'],
@@ -70,6 +75,7 @@ final class DrawParticipantRepository
   {
     $sql = "SELECT id, draw_id, participation_scope_id, action_number, channel, status,
                    first_name, last_name, email, phone_e164,
+                   document_type, document_number, document_key,
                    registered_at, registered_by_user_id,
                    cancel_reason, canceled_by_user_id,
                    active_from, inactive_at, created_at, updated_at
@@ -104,7 +110,6 @@ final class DrawParticipantRepository
 
     $sqlBase = "FROM draw_participant WHERE " . implode(' AND ', $where);
 
-    // total
     $st = $this->db->prepare("SELECT COUNT(1) AS c {$sqlBase}");
     $st->execute($vals);
     $total = (int)($st->fetch()['c'] ?? 0);
@@ -115,6 +120,7 @@ final class DrawParticipantRepository
 
     $sql = "SELECT id, draw_id, participation_scope_id, action_number, channel, status,
                    first_name, last_name, email, phone_e164,
+                   document_type, document_number, document_key,
                    registered_at, registered_by_user_id,
                    cancel_reason, canceled_by_user_id,
                    active_from, inactive_at, created_at, updated_at

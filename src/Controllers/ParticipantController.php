@@ -92,8 +92,30 @@ final class ParticipantController
     $person = is_array($body['person'] ?? null) ? $body['person'] : [];
     $firstName = $this->nullableTrim($person['firstName'] ?? null);
     $lastName = $this->nullableTrim($person['lastName'] ?? null);
-    $email = $this->nullableTrim($person['email'] ?? null);
-    $phone = $this->nullableTrim($person['phoneE164'] ?? null);
+    $email = $this->normalizeEmail($person['email'] ?? null);
+    $phone = $this->normalizePhone($person['phoneE164'] ?? null);
+
+    $document = is_array($body['document'] ?? null) ? $body['document'] : [];
+    $documentType = $this->nullableTrim($document['type'] ?? null);
+    $documentNumber = $this->nullableTrim($document['number'] ?? null);
+
+    if ($channel === 'WEB') {
+      if ($documentType === null || $documentNumber === null) {
+        throw new HttpException(400, 'DOCUMENT_REQUIRED', 'Documento requerido para registro web');
+      }
+    }
+
+    $normalizedDocumentType = null;
+    $normalizedDocumentNumber = null;
+    $documentKey = null;
+    if ($documentType !== null || $documentNumber !== null) {
+      if ($documentType === null || $documentNumber === null) {
+        throw new HttpException(400, 'DOCUMENT_INVALID', 'Debe indicar tipo y número de documento');
+      }
+      $normalizedDocumentType = $this->normalizeDocumentType($documentType);
+      $normalizedDocumentNumber = $this->normalizeDocumentNumber($documentNumber);
+      $documentKey = $this->buildDocumentKey($normalizedDocumentType, $normalizedDocumentNumber);
+    }
 
     $now = date('Y-m-d H:i:s');
 
@@ -147,6 +169,12 @@ final class ParticipantController
       throw new HttpException(422, 'ACTION_BLOCKED', 'Acción no elegible (bloqueada)');
     }
 
+    // Strong validation only for WEB landing.
+    if ($channel === 'WEB') {
+      $shareholderController = new ShareholderController($this->db);
+      $shareholderController->validateActionDocumentMatch($actionNumber, (string)$normalizedDocumentType, (string)$normalizedDocumentNumber);
+    }
+
     $registeredBy = ($channel === 'ASSISTED') ? $ctx->userId : null;
 
     $id = $participantRepo->create([
@@ -159,6 +187,9 @@ final class ParticipantController
       'last_name' => $lastName,
       'email' => $email,
       'phone_e164' => $phone,
+      'document_type' => $normalizedDocumentType,
+      'document_number' => $normalizedDocumentNumber,
+      'document_key' => $documentKey,
       'registered_at' => $now,
       'registered_by_user_id' => $registeredBy,
       'active_from' => $now,
@@ -215,6 +246,11 @@ final class ParticipantController
         'email' => $r['email'],
         'phoneE164' => $r['phone_e164'],
       ],
+      'document' => [
+        'type' => $r['document_type'],
+        'number' => $r['document_number'],
+        'key' => $r['document_key'],
+      ],
       'registeredAt' => $r['registered_at'],
       'registeredByUserId' => $r['registered_by_user_id'] !== null ? (int)$r['registered_by_user_id'] : null,
       'cancelReason' => $r['cancel_reason'],
@@ -239,9 +275,55 @@ final class ParticipantController
     return $s === '' ? null : $s;
   }
 
+  private function normalizeDocumentType(string $type): string
+  {
+    $value = strtoupper(trim($type));
+    if (!in_array($value, ['V', 'E', 'J'], true)) {
+      throw new HttpException(400, 'DOCUMENT_INVALID', 'Tipo de documento inválido');
+    }
+    return $value;
+  }
+
+  private function normalizeDocumentNumber(string $value): string
+  {
+    $normalized = strtoupper(trim(preg_replace('/[^A-Z0-9]+/', '', (string)$value)));
+    if ($normalized === '') {
+      throw new HttpException(400, 'DOCUMENT_INVALID', 'Número de documento inválido');
+    }
+    if (strlen($normalized) < 6 || strlen($normalized) > 15) {
+      throw new HttpException(400, 'DOCUMENT_INVALID', 'Número de documento inválido');
+    }
+    return $normalized;
+  }
+
+  private function buildDocumentKey(string $type, string $number): string
+  {
+    return $type . '-' . $number;
+  }
+
+  private function normalizeEmail($value): ?string
+  {
+    $email = $this->nullableTrim($value);
+    if ($email === null) return null;
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+      throw new HttpException(400, 'VALIDATION', 'email inválido');
+    }
+    return $email;
+  }
+
+  private function normalizePhone($value): ?string
+  {
+    if ($value === null) return null;
+    $digits = preg_replace('/\D+/', '', (string)$value);
+    if ($digits === '') return null;
+    if (strlen($digits) < 10 || strlen($digits) > 15) {
+      throw new HttpException(400, 'VALIDATION', 'phoneE164 inválido');
+    }
+    return $digits;
+  }
+
   private function isWithinNow(string $from, string $to, string $now): bool
   {
-    // All are 'YYYY-MM-DD HH:MM:SS' already in DB and in $now (UTC).
     return ($from <= $now) && ($to > $now);
   }
 

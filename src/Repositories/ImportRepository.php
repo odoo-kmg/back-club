@@ -105,6 +105,44 @@ final class ImportRepository
     ]);
   }
 
+  public function insertShareholderRow(array $row, int $actorUserId): void
+  {
+    $sql = "INSERT INTO shareholder_import_row (
+              file_import_id, row_number, action_number,
+              document_type, document_number, document_key,
+              first_name, last_name, phone_e164, email,
+              operation, result_status, error_message,
+              active_from, inactive_at,
+              created_at, updated_at, created_by, updated_by
+            ) VALUES (
+              ?, ?, ?,
+              ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?, ?,
+              ?, NULL,
+              NOW(), NOW(), ?, ?
+            )";
+    $st = $this->db->prepare($sql);
+    $st->execute([
+      (int)$row['file_import_id'],
+      (int)$row['row_number'],
+      $row['action_number'],
+      $row['document_type'],
+      $row['document_number'],
+      $row['document_key'],
+      $row['first_name'],
+      $row['last_name'],
+      $row['phone_e164'],
+      $row['email'],
+      $row['operation'],
+      (string)$row['result_status'],
+      $row['error_message'],
+      (string)$row['active_from'],
+      $actorUserId,
+      $actorUserId,
+    ]);
+  }
+
   /** @return array<int,array<string,mixed>> */
   public function listRows(int $importId, ?string $statusFilter, int $page, int $pageSize): array
   {
@@ -122,6 +160,33 @@ final class ImportRepository
                    operation, reason, result_status, error_message,
                    created_at
             FROM file_import_row
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY row_number ASC
+            LIMIT {$pageSize} OFFSET {$offset}";
+    $st = $this->db->prepare($sql);
+    $st->execute($vals);
+    return $st->fetchAll();
+  }
+
+  /** @return array<int,array<string,mixed>> */
+  public function listShareholderRows(int $importId, ?string $statusFilter, int $page, int $pageSize): array
+  {
+    $where = ['file_import_id = ?'];
+    $vals = [$importId];
+
+    if ($statusFilter) {
+      $where[] = 'result_status = ?';
+      $vals[] = $statusFilter;
+    }
+
+    $offset = ($page - 1) * $pageSize;
+
+    $sql = "SELECT id, file_import_id, row_number, action_number,
+                   document_type, document_number, document_key,
+                   first_name, last_name, phone_e164, email,
+                   operation, result_status, error_message,
+                   created_at
+            FROM shareholder_import_row
             WHERE " . implode(' AND ', $where) . "
             ORDER BY row_number ASC
             LIMIT {$pageSize} OFFSET {$offset}";
