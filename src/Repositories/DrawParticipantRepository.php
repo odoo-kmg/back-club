@@ -88,6 +88,45 @@ final class DrawParticipantRepository
     return $row ?: null;
   }
 
+  public function getActiveByDrawAndAction(int $drawId, int $actionNumber): ?array
+  {
+    $sql = "SELECT id, draw_id, participation_scope_id, action_number, channel, status,
+                   first_name, last_name, email, phone_e164,
+                   document_type, document_number, document_key,
+                   registered_at, registered_by_user_id,
+                   cancel_reason, canceled_by_user_id,
+                   active_from, inactive_at, created_at, updated_at
+            FROM draw_participant
+            WHERE draw_id = ?
+              AND action_number = ?
+              AND inactive_at IS NULL
+            ORDER BY id DESC
+            LIMIT 1";
+    $st = $this->db->prepare($sql);
+    $st->execute([$drawId, $actionNumber]);
+    $row = $st->fetch();
+    return $row ?: null;
+  }
+
+  /** @return array<int,array<string,mixed>> */
+  public function listNotificationRowsByDraw(int $drawId): array
+  {
+    $sql = "SELECT p.action_number, p.phone_e164,
+                   CASE WHEN w.id IS NULL THEN 0 ELSE 1 END AS is_winner,
+                   w.winner_order, w.selected_at
+            FROM draw_participant p
+            LEFT JOIN draw_winner w
+              ON w.draw_id = p.draw_id
+             AND w.action_number = p.action_number
+             AND w.inactive_at IS NULL
+            WHERE p.draw_id = ?
+              AND p.inactive_at IS NULL
+            ORDER BY p.action_number ASC";
+    $st = $this->db->prepare($sql);
+    $st->execute([$drawId]);
+    return $st->fetchAll();
+  }
+
   /** @return array{items: array<int,array<string,mixed>>, total:int} */
   public function listByDraw(int $drawId, array $filters, bool $includeInactive): array
   {

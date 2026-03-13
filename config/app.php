@@ -38,7 +38,7 @@ return [
 
   // API keys para integraciones externas (NO usar en el browser)
   'api_keys' => [
-    // 'botmaker' => 'CHANGE_ME',
+    'botmaker' => '623cd39b8a1da51886cc8b9704b0230febdd232ecdba089ad153323aa35fabff',
   ],
 
   // Token para herramientas temporales (hash.php). Cambia y luego borras tools/hash.php

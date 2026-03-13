@@ -87,6 +87,23 @@ final class DrawWinnerRepository
     return $this->listActiveActionNumbersByDraw($drawId);
   }
 
+
+  public function findVisibleWinnerByDrawAndAction(int $drawId, int $actionNumber): ?array
+  {
+    $st = $this->db->prepare("SELECT id, draw_execution_id, draw_id, action_number, winner_order, selected_at,
+                                     reveal_at, active_from, inactive_at, created_at, updated_at
+                              FROM draw_winner
+                              WHERE draw_id = ?
+                                AND action_number = ?
+                                AND inactive_at IS NULL
+                                AND (reveal_at IS NULL OR reveal_at <= NOW())
+                              ORDER BY winner_order ASC, selected_at ASC
+                              LIMIT 1");
+    $st->execute([$drawId, $actionNumber]);
+    $row = $st->fetch();
+    return $row ?: null;
+  }
+
   public function insertWinner(int $executionId, int $drawId, int $actionNumber, int $winnerOrder, int $actorUserId): int
   {
     $now = $this->nowVE();

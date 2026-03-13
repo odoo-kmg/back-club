@@ -24,16 +24,29 @@ final class ParticipantController
    */
   public function registerPublic(int $drawId, int $serviceUserId, string $serviceUsername, Request $req, Response $res): void
   {
+    $this->registerMachine($drawId, $serviceUserId, $serviceUsername, 'WEB', $req, $res);
+  }
+
+  /**
+   * Machine-to-machine registration endpoint.
+   * Intended for channels like WEB public landing or WHATSAPP integrations.
+   */
+  public function registerMachine(int $drawId, int $serviceUserId, string $serviceUsername, string $channel, Request $req, Response $res): void
+  {
     if ($serviceUserId <= 0) {
       throw new HttpException(500, 'SERVER_ERROR', 'Configuración incompleta');
     }
 
-    $ctx = new AuthContext($serviceUserId, $serviceUsername, 'Servicio - Registro Web', [], []);
+    $forcedChannel = strtoupper(trim($channel));
+    if (!in_array($forcedChannel, ['WEB', 'WHATSAPP'], true)) {
+      throw new HttpException(500, 'SERVER_ERROR', 'Canal técnico inválido');
+    }
+
+    $ctx = new AuthContext($serviceUserId, $serviceUsername, 'Servicio - Registro ' . $forcedChannel, [], []);
 
     $body = $req->json();
     if (!$body) throw new HttpException(400, 'BAD_JSON', 'JSON inválido o vacío');
-    // Force WEB channel regardless of client payload.
-    $body['channel'] = 'WEB';
+    $body['channel'] = $forcedChannel;
 
     $this->registerInternal($drawId, $ctx, $body, $res);
   }
@@ -99,9 +112,9 @@ final class ParticipantController
     $documentType = $this->nullableTrim($document['type'] ?? null);
     $documentNumber = $this->nullableTrim($document['number'] ?? null);
 
-    if ($channel === 'WEB') {
+    if (in_array($channel, ['WHATSAPP'], true)) {
       if ($documentType === null || $documentNumber === null) {
-        throw new HttpException(400, 'DOCUMENT_REQUIRED', 'Documento requerido para registro web');
+        throw new HttpException(400, 'DOCUMENT_REQUIRED', 'Documento requerido para este canal');
       }
     }
 
@@ -119,12 +132,10 @@ final class ParticipantController
 
     $now = date('Y-m-d H:i:s');
 
-    // Validate draw exists and is open for registration
     $drawRepo = new DrawRepository($this->db);
     $draw = $drawRepo->getById($drawId);
     if (!$draw) throw new HttpException(404, 'NOT_FOUND', 'Sorteo no existe');
 
-    // Must be active (by window)
     if (!$this->isActiveNow($draw['active_from'], $draw['inactive_at'], $now)) {
       throw new HttpException(422, 'DRAW_INACTIVE', 'Sorteo inactivo');
     }
@@ -133,20 +144,17 @@ final class ParticipantController
       throw new HttpException(422, 'REGISTRATION_CLOSED', 'Registro no está abierto');
     }
 
-    // Must be within registration window configured in draw
     if (!$this->isWithinNow($draw['reg_open_at'], $draw['reg_close_at'], $now)) {
       throw new HttpException(422, 'REGISTRATION_CLOSED', 'Fuera de la ventana de registro');
     }
 
     $scopeId = (int)$draw['participation_scope_id'];
 
-    // Enforce uniqueness at API-level with explicit error
     $participantRepo = new DrawParticipantRepository($this->db);
     if ($participantRepo->hasActiveParticipantInScope($scopeId, $actionNumber)) {
       throw new HttpException(409, 'ACTION_ALREADY_PARTICIPATING_SCOPE', 'La acción ya participa en este scope');
     }
 
-    // Eligibility ranges
     $rangeRepo = new EligibilityRangeRepository($this->db);
     $ranges = $rangeRepo->listByDraw($drawId, false);
     if (count($ranges) === 0) {
@@ -163,14 +171,12 @@ final class ParticipantController
       throw new HttpException(422, 'ACTION_NOT_ELIGIBLE', 'Acción no elegible para este sorteo');
     }
 
-    // Blocks (global/draw)
     $blockRepo = new ActionBlockRepository($this->db);
     if ($blockRepo->isActionBlocked($actionNumber, $drawId)) {
       throw new HttpException(422, 'ACTION_BLOCKED', 'Acción no elegible (bloqueada)');
     }
 
-    // Strong validation only for WEB landing.
-    if ($channel === 'WEB') {
+    if (in_array($channel, ['WHATSAPP'], true)) {
       $shareholderController = new ShareholderController($this->db);
       $shareholderController->validateActionDocumentMatch($actionNumber, (string)$normalizedDocumentType, (string)$normalizedDocumentNumber);
     }
@@ -201,6 +207,7 @@ final class ParticipantController
         'participantId' => $id,
         'drawId' => $drawId,
         'actionNumber' => $actionNumber,
+        'channel' => $channel,
         'registeredAt' => $now,
       ],
       'error' => null,
@@ -220,7 +227,6 @@ final class ParticipantController
     if (!$row) throw new HttpException(404, 'NOT_FOUND', 'Participación no existe');
 
     if ((string)$row['status'] === 'CANCELED' || $row['inactive_at'] !== null) {
-      // idempotent
       $res->json(200, ['ok' => true, 'data' => ['id' => $participantId, 'status' => 'CANCELED'], 'error' => null]);
       return;
     }
@@ -279,21 +285,18 @@ final class ParticipantController
   {
     $value = strtoupper(trim($type));
     if (!in_array($value, ['V', 'E', 'J'], true)) {
-      throw new HttpException(400, 'DOCUMENT_INVALID', 'Tipo de documento inválido');
+      throw new HttpException(400, 'VALIDATION', 'document.type inválido (V|E|J)');
     }
     return $value;
   }
 
-  private function normalizeDocumentNumber(string $value): string
+  private function normalizeDocumentNumber(string $number): string
   {
-    $normalized = strtoupper(trim(preg_replace('/[^A-Z0-9]+/', '', (string)$value)));
-    if ($normalized === '') {
-      throw new HttpException(400, 'DOCUMENT_INVALID', 'Número de documento inválido');
+    $digits = preg_replace('/\D+/', '', trim($number)) ?? '';
+    if ($digits === '' || strlen($digits) < 6 || strlen($digits) > 20) {
+      throw new HttpException(400, 'VALIDATION', 'document.number inválido');
     }
-    if (strlen($normalized) < 6 || strlen($normalized) > 15) {
-      throw new HttpException(400, 'DOCUMENT_INVALID', 'Número de documento inválido');
-    }
-    return $normalized;
+    return $digits;
   }
 
   private function buildDocumentKey(string $type, string $number): string
@@ -301,25 +304,38 @@ final class ParticipantController
     return $type . '-' . $number;
   }
 
-  private function normalizeEmail($value): ?string
-  {
-    $email = $this->nullableTrim($value);
-    if ($email === null) return null;
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-      throw new HttpException(400, 'VALIDATION', 'email inválido');
-    }
-    return $email;
-  }
-
   private function normalizePhone($value): ?string
   {
-    if ($value === null) return null;
-    $digits = preg_replace('/\D+/', '', (string)$value);
+    $s = $this->nullableTrim($value);
+    if ($s === null) return null;
+
+    $digits = preg_replace('/\D+/', '', $s) ?? '';
     if ($digits === '') return null;
-    if (strlen($digits) < 10 || strlen($digits) > 15) {
-      throw new HttpException(400, 'VALIDATION', 'phoneE164 inválido');
+
+    if (strlen($digits) === 11 && strpos($digits, '0') === 0) {
+      return '58' . substr($digits, 1);
     }
-    return $digits;
+
+    if (strlen($digits) === 10 && strpos($digits, '4') === 0) {
+      return '58' . $digits;
+    }
+
+    if (strlen($digits) >= 11 && strlen($digits) <= 15) {
+      return $digits;
+    }
+
+    throw new HttpException(400, 'VALIDATION', 'person.phoneE164 inválido');
+  }
+
+  private function normalizeEmail($value): ?string
+  {
+    $s = $this->nullableTrim($value);
+    if ($s === null) return null;
+    $s = strtolower($s);
+    if (!filter_var($s, FILTER_VALIDATE_EMAIL)) {
+      throw new HttpException(400, 'VALIDATION', 'person.email inválido');
+    }
+    return $s;
   }
 
   private function isWithinNow(string $from, string $to, string $now): bool

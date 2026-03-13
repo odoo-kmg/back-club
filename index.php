@@ -9,6 +9,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\HttpException;
 use App\Security\Auth;
+use App\Security\ApiKey;
 use App\Security\Cors;
 use App\Security\Headers;
 
@@ -29,6 +30,7 @@ use App\Controllers\ShareholderController;
 use App\Controllers\ExecutionController;
 use App\Controllers\WinnerController;
 use App\Controllers\ExportController;
+use App\Controllers\BotmakerController;
 date_default_timezone_set('America/Caracas');
 $config = Config::load(__DIR__ . '/config');
 $db = Db::pdo($config);
@@ -65,16 +67,17 @@ $shareholderController = new ShareholderController($db);
 $executionController = new ExecutionController($db);
 $winnerController = new WinnerController($db);
 $exportController = new ExportController($db);
+$botmakerController = new BotmakerController($db);
 
 // Public landing: service user resolution for audit fields.
 // Priority:
 //  1) PUBLIC_WEB_SERVICE_USER_ID (numeric)
 //  2) PUBLIC_WEB_SERVICE_USERNAME (default: svc_web_registration) lookup in app_user
-function resolvePublicServiceUser(PDO $db): array
+function resolveServiceUser(PDO $db, string $idEnv, string $usernameEnv, string $defaultUsername): array
 {
-  $id = (int)($_ENV['PUBLIC_WEB_SERVICE_USER_ID'] ?? getenv('PUBLIC_WEB_SERVICE_USER_ID') ?? 0);
-  $username = (string)($_ENV['PUBLIC_WEB_SERVICE_USERNAME'] ?? getenv('PUBLIC_WEB_SERVICE_USERNAME') ?? 'svc_web_registration');
-  $username = trim($username) !== '' ? trim($username) : 'svc_web_registration';
+  $id = (int)($_ENV[$idEnv] ?? getenv($idEnv) ?? 0);
+  $username = (string)($_ENV[$usernameEnv] ?? getenv($usernameEnv) ?? $defaultUsername);
+  $username = trim($username) !== '' ? trim($username) : $defaultUsername;
 
   if ($id > 0) return [$id, $username];
 
@@ -84,6 +87,16 @@ function resolvePublicServiceUser(PDO $db): array
   if ($row) return [(int)$row['id'], (string)$row['username']];
 
   return [0, $username];
+}
+
+function resolvePublicServiceUser(PDO $db): array
+{
+  return resolveServiceUser($db, 'PUBLIC_WEB_SERVICE_USER_ID', 'PUBLIC_WEB_SERVICE_USERNAME', 'svc_web_registration');
+}
+
+function resolveBotmakerServiceUser(PDO $db): array
+{
+  return resolveServiceUser($db, 'BOTMAKER_SERVICE_USER_ID', 'BOTMAKER_SERVICE_USERNAME', 'svc_web_registration');
 }
 
 try {
@@ -140,6 +153,31 @@ try {
     ['POST', '#^/v1/public/draws/(?P<id>[0-9]+)/participants$#', function ($m) use ($participantController, $db, $req, $res) {
       [$serviceUserId, $serviceUsername] = resolvePublicServiceUser($db);
       $participantController->registerPublic((int)$m['id'], $serviceUserId, $serviceUsername, $req, $res);
+    }],
+
+    // ==========================
+    // BOTMAKER - Machine-to-machine
+    // ==========================
+
+    ['GET', '#^/v1/integrations/botmaker/draws/for-registration$#', function () use ($botmakerController, $config, $req, $res) {
+      ApiKey::requireKey($config, $req, 'botmaker');
+      $botmakerController->listDrawsForRegistration($res);
+    }],
+
+    ['POST', '#^/v1/integrations/botmaker/draws/(?P<id>[0-9]+)/participants$#', function ($m) use ($botmakerController, $config, $db, $req, $res) {
+      ApiKey::requireKey($config, $req, 'botmaker');
+      [$serviceUserId, $serviceUsername] = resolveBotmakerServiceUser($db);
+      $botmakerController->registerParticipant((int)$m['id'], $serviceUserId, $serviceUsername, $req, $res);
+    }],
+
+    ['GET', '#^/v1/integrations/botmaker/draws/for-results$#', function () use ($botmakerController, $config, $req, $res) {
+      ApiKey::requireKey($config, $req, 'botmaker');
+      $botmakerController->listDrawsForResults($req, $res);
+    }],
+
+    ['GET', '#^/v1/integrations/botmaker/draws/(?P<id>[0-9]+)/results/by-action$#', function ($m) use ($botmakerController, $config, $req, $res) {
+      ApiKey::requireKey($config, $req, 'botmaker');
+      $botmakerController->getResultByAction((int)$m['id'], $req, $res);
     }],
 
     // Auth
@@ -447,6 +485,12 @@ try {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'RPT_EXPORT_READ');
       $exportController->exportJson((int)$m['id'], $req, $res);
+    }],
+
+    ['GET', '#^/v1/draws/(?P<id>\d+)/export/results-notification$#', function ($m) use ($botmakerController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'RPT_EXPORT_READ');
+      $botmakerController->exportResultsNotification((int)$m['id'], $req, $res);
     }],
   ];
 
