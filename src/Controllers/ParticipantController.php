@@ -112,7 +112,7 @@ final class ParticipantController
     $documentType = $this->nullableTrim($document['type'] ?? null);
     $documentNumber = $this->nullableTrim($document['number'] ?? null);
 
-    if (in_array($channel, ['WHATSAPP'], true)) {
+    if (in_array($channel, ['WEB','WHATSAPP'], true)) {
       if ($documentType === null || $documentNumber === null) {
         throw new HttpException(400, 'DOCUMENT_REQUIRED', 'Documento requerido para este canal');
       }
@@ -176,7 +176,7 @@ final class ParticipantController
       throw new HttpException(422, 'ACTION_BLOCKED', 'Acción no elegible (bloqueada)');
     }
 
-    if (in_array($channel, ['WHATSAPP'], true)) {
+    if (in_array($channel, ['WEB','WHATSAPP'], true)) {
       $shareholderController = new ShareholderController($this->db);
       $shareholderController->validateActionDocumentMatch($actionNumber, (string)$normalizedDocumentType, (string)$normalizedDocumentNumber);
     }

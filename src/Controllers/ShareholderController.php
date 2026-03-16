@@ -58,9 +58,9 @@ final class ShareholderController
     $payload = $this->normalizePayload($body);
 
     $repo = new ShareholderRepository($this->db);
-    $byAction = $repo->findActiveByActionNumber($payload['action_number']);
-    if ($byAction) {
-      throw new HttpException(409, 'ACTION_ALREADY_EXISTS', 'Ya existe un accionista vigente para esa acción');
+    $existingMatch = $repo->findActiveMatch($payload['action_number'], $payload['document_key']);
+    if ($existingMatch) {
+      throw new HttpException(409, 'ACTION_DOCUMENT_ALREADY_EXISTS', 'Ya existe una cédula/documento vigente para esa acción');
     }
 
     $byDocument = $repo->findActiveByDocumentKey($payload['document_key']);
@@ -97,9 +97,9 @@ final class ShareholderController
 
     $payload = $this->normalizePayload($merged);
 
-    $byAction = $repo->findActiveByActionNumber($payload['action_number']);
-    if ($byAction && (int)$byAction['id'] !== $id) {
-      throw new HttpException(409, 'ACTION_ALREADY_EXISTS', 'Ya existe un accionista vigente para esa acción');
+    $existingMatch = $repo->findActiveMatch($payload['action_number'], $payload['document_key']);
+    if ($existingMatch && (int)$existingMatch['id'] !== $id) {
+      throw new HttpException(409, 'ACTION_DOCUMENT_ALREADY_EXISTS', 'Ya existe una cédula/documento vigente para esa acción');
     }
 
     $byDocument = $repo->findActiveByDocumentKey($payload['document_key']);
@@ -214,24 +214,22 @@ final class ShareholderController
 
         $this->db->beginTransaction();
 
-        $existingByAction = $repo->findActiveByActionNumber($payload['action_number']);
+        $existingMatch = $repo->findActiveMatch($payload['action_number'], $payload['document_key']);
         $existingByDocument = $repo->findActiveByDocumentKey($payload['document_key']);
 
-        if ($existingByAction && $existingByDocument && (int)$existingByAction['id'] !== (int)$existingByDocument['id']) {
-          throw new HttpException(409, 'DATA_CONFLICT', 'Conflicto: la acción y el documento vigentes apuntan a registros distintos');
+        if ($existingByDocument && !$existingMatch && (int)$existingByDocument['action_number'] !== (int)$payload['action_number']) {
+          throw new HttpException(409, 'DOCUMENT_ALREADY_EXISTS', 'Ya existe un accionista vigente para ese documento');
         }
 
-        $current = $existingByAction ?: $existingByDocument;
-        if (!$current) {
+        if (!$existingMatch) {
           $repo->create($payload, $ctx->userId);
           $operation = 'INSERT';
         } else {
-          if ($repo->sameBusinessData($current, $payload)) {
+          if ($repo->sameBusinessData($existingMatch, $payload)) {
             $operation = 'NO_CHANGE';
             $resultStatus = 'SKIPPED';
           } else {
-            $repo->deactivate((int)$current['id'], date('Y-m-d H:i:s'), $ctx->userId);
-            $repo->create($payload, $ctx->userId);
+            $repo->updateActive((int)$existingMatch['id'], $payload, $ctx->userId);
             $operation = 'UPDATE';
           }
         }
@@ -367,12 +365,13 @@ final class ShareholderController
     $documentKey = $this->buildDocumentKey($normalizedType, $normalizedNumber);
 
     $repo = new ShareholderRepository($this->db);
-    $byAction = $repo->findActiveByActionNumber($actionNumber);
-    if (!$byAction) {
+    $activeRows = $repo->findActiveListByActionNumber($actionNumber);
+    if (count($activeRows) === 0) {
       throw new HttpException(422, 'ACTION_NOT_FOUND_IN_SHAREHOLDER', 'La acción no existe en el padrón de accionistas');
     }
 
-    if ((string)$byAction['document_key'] !== $documentKey) {
+    $match = $repo->findActiveMatch($actionNumber, $documentKey);
+    if (!$match) {
       throw new HttpException(422, 'DOCUMENT_MISMATCH_FOR_ACTION', 'El documento no corresponde a la acción indicada');
     }
   }

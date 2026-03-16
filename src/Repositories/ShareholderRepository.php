@@ -36,11 +36,27 @@ final class ShareholderRepository
             FROM shareholder
             WHERE action_number = ?
               AND inactive_at IS NULL
+            ORDER BY id ASC
             LIMIT 1";
     $st = $this->db->prepare($sql);
     $st->execute([$actionNumber]);
     $row = $st->fetch();
     return $row ?: null;
+  }
+
+  /** @return array<int,array<string,mixed>> */
+  public function findActiveListByActionNumber(int $actionNumber): array
+  {
+    $sql = "SELECT id, action_number, document_type, document_number, document_key,
+                   first_name, last_name, phone_e164, email, source_file_import_id,
+                   active_from, inactive_at, created_at, updated_at, created_by, updated_by
+            FROM shareholder
+            WHERE action_number = ?
+              AND inactive_at IS NULL
+            ORDER BY id ASC";
+    $st = $this->db->prepare($sql);
+    $st->execute([$actionNumber]);
+    return $st->fetchAll() ?: [];
   }
 
   public function findActiveByDocumentKey(string $documentKey): ?array
@@ -162,6 +178,38 @@ final class ShareholderRepository
     ]);
 
     return (int)$this->db->lastInsertId();
+  }
+
+  public function updateActive(int $id, array $data, int $actorUserId): void
+  {
+    $sql = "UPDATE shareholder
+            SET action_number = ?,
+                document_type = ?,
+                document_number = ?,
+                document_key = ?,
+                first_name = ?,
+                last_name = ?,
+                phone_e164 = ?,
+                email = ?,
+                source_file_import_id = ?,
+                updated_at = NOW(),
+                updated_by = ?
+            WHERE id = ?
+              AND inactive_at IS NULL";
+    $st = $this->db->prepare($sql);
+    $st->execute([
+      (int)$data['action_number'],
+      (string)$data['document_type'],
+      (string)$data['document_number'],
+      (string)$data['document_key'],
+      $data['first_name'],
+      $data['last_name'],
+      $data['phone_e164'],
+      $data['email'],
+      $data['source_file_import_id'],
+      $actorUserId,
+      $id,
+    ]);
   }
 
   public function deactivate(int $id, string $inactiveAt, int $actorUserId): void
