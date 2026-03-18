@@ -14,12 +14,14 @@ use App\Repositories\DrawWinnerRepository;
 use App\Repositories\DrawExclusionRepository;
 use App\Repositories\AuditEventRepository;
 use App\Security\AuthContext;
+use App\Services\DrawNotificationService;
 use PDO;
 
 final class ExecutionController
 {
   private PDO $db;
-  public function __construct(PDO $db) { $this->db = $db; }
+  private array $config;
+  public function __construct(PDO $db, array $config) { $this->db = $db; $this->config = $config; }
 
   public function start(int $drawId, AuthContext $ctx, Request $req, Response $res): void
   {
@@ -364,6 +366,15 @@ final class ExecutionController
           ['drawId' => $drawId, 'executionId' => $executionId, 'actionNumber' => $picked, 'winnerOrder' => $winnerOrder],
           $ctx->userId
         );
+
+        try {
+          $participant = (new \App\Repositories\DrawParticipantRepository($this->db))->getActiveByDrawAndAction($drawId, $picked);
+          if ($participant) {
+            (new DrawNotificationService($this->db, $this->config))->sendAssignedNotification($draw, $participant, $winnerOrder, $winnerId, $ctx->userId);
+          }
+        } catch (\Throwable $notifyError) {
+          // La notificación no puede romper la ejecución del sorteo manual.
+        }
 
         $res->json(200, [
           'ok' => true,

@@ -41,6 +41,18 @@ return [
     'botmaker' => '623cd39b8a1da51886cc8b9704b0230febdd232ecdba089ad153323aa35fabff',
   ],
 
+  'notifications' => [
+    'botmaker' => [
+      // Activar solo cuando Botmaker ya tenga listo el webhook/receptor de plantillas.
+      'enabled' => false,
+      'endpoint' => '',
+      'api_key' => '',
+      'timeout_seconds' => 10,
+      'assigned_template' => 'resultado_asignado',
+      'not_assigned_template' => 'resultado_no_asignado',
+    ],
+  ],
+
   // Token para herramientas temporales (hash.php). Cambia y luego borras tools/hash.php
   'tools' => [
     'hash_token' => 'f61562105657fdcdcb1c08f88d4632d84e4d8294dc99ed8883cef46b17dde484',

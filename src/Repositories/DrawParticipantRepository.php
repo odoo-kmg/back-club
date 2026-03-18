@@ -109,6 +109,25 @@ final class DrawParticipantRepository
   }
 
   /** @return array<int,array<string,mixed>> */
+  public function listNotificationTargetsByDraw(int $drawId): array
+  {
+    $sql = "SELECT p.id AS participant_id, p.action_number, p.phone_e164,
+                   CASE WHEN w.id IS NULL THEN 0 ELSE 1 END AS is_winner,
+                   w.id AS winner_id, w.winner_order, w.selected_at
+            FROM draw_participant p
+            LEFT JOIN draw_winner w
+              ON w.draw_id = p.draw_id
+             AND w.action_number = p.action_number
+             AND w.inactive_at IS NULL
+            WHERE p.draw_id = ?
+              AND p.inactive_at IS NULL
+            ORDER BY p.action_number ASC";
+    $st = $this->db->prepare($sql);
+    $st->execute([$drawId]);
+    return $st->fetchAll();
+  }
+
+  /** @return array<int,array<string,mixed>> */
   public function listNotificationRowsByDraw(int $drawId): array
   {
     $sql = "SELECT p.action_number, p.phone_e164,

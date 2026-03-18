@@ -31,6 +31,7 @@ use App\Controllers\ExecutionController;
 use App\Controllers\WinnerController;
 use App\Controllers\ExportController;
 use App\Controllers\BotmakerController;
+use App\Controllers\DrawNotificationController;
 date_default_timezone_set('America/Caracas');
 $config = Config::load(__DIR__ . '/config');
 $db = Db::pdo($config);
@@ -64,10 +65,11 @@ $importController = new ImportController($db);
 $shareholderController = new ShareholderController($db);
 
 // Fase 4
-$executionController = new ExecutionController($db);
+$executionController = new ExecutionController($db, $config);
 $winnerController = new WinnerController($db);
 $exportController = new ExportController($db);
 $botmakerController = new BotmakerController($db);
+$drawNotificationController = new DrawNotificationController($db, $config);
 
 // Public landing: service user resolution for audit fields.
 // Priority:
@@ -491,6 +493,12 @@ try {
       $ctx = Auth::requireAuth($config, $db, $req);
       Auth::requirePermission($ctx, 'RPT_EXPORT_READ');
       $botmakerController->exportResultsNotification((int)$m['id'], $req, $res);
+    }],
+
+    ['POST', '#^/v1/draws/(?P<id>\d+)/notifications/results$#', function ($m) use ($drawNotificationController, $config, $db, $req, $res) {
+      $ctx = Auth::requireAuth($config, $db, $req);
+      Auth::requirePermission($ctx, 'OPS_DRAW_EXECUTE_FINISH');
+      $drawNotificationController->notifyResults((int)$m['id'], $ctx, $res);
     }],
   ];
 
