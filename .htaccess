@@ -1,5 +1,20 @@
 RewriteEngine On
 
+# Disable cache for everything served from this API folder
+<IfModule mod_headers.c>
+  Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0, s-maxage=0, private"
+  Header always set Pragma "no-cache"
+  Header always set Expires "0"
+  Header always set Surrogate-Control "no-store"
+  Header always unset ETag
+</IfModule>
+
+FileETag None
+
+<IfModule mod_expires.c>
+  ExpiresActive Off
+</IfModule>
+
 # Security: block direct access to source and config folders
 RewriteRule ^(src|config)/ - [F,L]
 

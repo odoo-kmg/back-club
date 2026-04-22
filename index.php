@@ -37,6 +37,7 @@ $config = Config::load(__DIR__ . '/config');
 $db = Db::pdo($config);
 
 Headers::applySecurityHeaders();
+Headers::applyNoCacheHeaders();
 Cors::handle($config);
 
 $req = Request::fromGlobals($config);
