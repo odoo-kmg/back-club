@@ -1,2 +1,0 @@
-INSERT INTO oxtools4_dev.draw_participant (draw_id, participation_scope_id, action_number, channel, status, first_name, last_name, email, phone_e164, registered_at, registered_by_user_id, cancel_reason, canceled_by_user_id, active_from, inactive_at, created_at, updated_at, created_by, updated_by) 
-VALUES(2, 1, 216, 'ASSISTED', 'ACTIVE', 'Gonzalo', 'Apolinar', 'gonzalo.apolinar@kmg.com.ve', '04126277000', '2026-03-07 09:50:18', 1, NULL, NULL, '2026-03-07 09:50:18', NULL, '2026-03-07 09:50:18', '2026-03-07 09:50:18', 1, 1);

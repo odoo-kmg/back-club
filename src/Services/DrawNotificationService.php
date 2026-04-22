@@ -32,14 +32,12 @@ final class DrawNotificationService
       $actionNumber,
       $phone,
       'ASSIGNED',
-      (string)($this->botmakerCfg()['assigned_template'] ?? 'resultado_asignado'),
+      (string)($this->botmakerCfg()['assigned_template'] ?? 'plantilla_club'),
       [
-        '1' => (string)($draw['name'] ?? ''),
-        '2' => (string)$actionNumber,
-        '3' => (string)$winnerOrder,
+        'actionNumber' => (string)$actionNumber,
+        'winnerOrder' => (string)$winnerOrder,
       ],
       [
-        'drawName' => (string)($draw['name'] ?? ''),
         'actionNumber' => (string)$actionNumber,
         'winnerOrder' => (string)$winnerOrder,
       ],
@@ -62,10 +60,10 @@ final class DrawNotificationService
       $actionNumber,
       $phone,
       'NOT_ASSIGNED',
-      (string)($this->botmakerCfg()['not_assigned_template'] ?? 'resultado_no_asignado'),
+      (string)($this->botmakerCfg()['not_assigned_template'] ?? 'accion_asignado'),
       [
-        '1' => (string)($draw['name'] ?? ''),
-        '2' => (string)$actionNumber,
+        'drawName' => (string)($draw['name'] ?? ''),
+        'actionNumber' => (string)$actionNumber,
       ],
       [
         'drawName' => (string)($draw['name'] ?? ''),

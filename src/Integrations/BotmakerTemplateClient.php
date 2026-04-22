@@ -12,36 +12,56 @@ final class BotmakerTemplateClient
     $this->cfg = $cfg;
   }
 
-  /** @return array{ok:bool,statusCode:int,responseBody:string,errorMessage:?string} */
+  /** @param array<string,mixed> $payload @return array{ok:bool,statusCode:int,responseBody:string,errorMessage:?string} */
   public function sendTemplate(array $payload): array
   {
-    $endpoint = trim((string)($this->cfg['endpoint'] ?? ''));
-    if ($endpoint === '') {
-      return ['ok' => false, 'statusCode' => 0, 'responseBody' => '', 'errorMessage' => 'BOTMAKER_ENDPOINT_EMPTY'];
-    }
-
     $timeout = (int)($this->cfg['timeout_seconds'] ?? 10);
     if ($timeout <= 0) $timeout = 10;
 
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    $accessToken = trim((string)($this->cfg['access_token'] ?? ''));
+    if ($accessToken === '') {
+      return ['ok' => false, 'statusCode' => 0, 'responseBody' => '', 'errorMessage' => 'BOTMAKER_ACCESS_TOKEN_EMPTY'];
+    }
+
+    $chatChannelNumber = preg_replace('/\D+/', '', (string)($this->cfg['chat_channel_number'] ?? ''));
+    if ($chatChannelNumber === '') {
+      return ['ok' => false, 'statusCode' => 0, 'responseBody' => '', 'errorMessage' => 'BOTMAKER_CHANNEL_EMPTY'];
+    }
+
+    $platformContactId = preg_replace('/\D+/', '', (string)($payload['phoneE164'] ?? ''));
+    $ruleNameOrId = trim((string)($payload['templateName'] ?? ''));
+    $params = (array)($payload['namedVariables'] ?? []);
+    $clientPayload = isset($this->cfg['client_payload']) ? (string)$this->cfg['client_payload'] : 'string';
+
+    if ($platformContactId === '') {
+      return ['ok' => false, 'statusCode' => 0, 'responseBody' => '', 'errorMessage' => 'BOTMAKER_DESTINATION_EMPTY'];
+    }
+    if ($ruleNameOrId === '') {
+      return ['ok' => false, 'statusCode' => 0, 'responseBody' => '', 'errorMessage' => 'BOTMAKER_TEMPLATE_EMPTY'];
+    }
+
+    $requestBody = [
+      'chatPlatform' => 'whatsapp',
+      'chatChannelNumber' => $chatChannelNumber,
+      'platformContactId' => $platformContactId,
+      'ruleNameOrId' => $ruleNameOrId,
+      'clientPayload' => $clientPayload,
+      'params' => $params,
+    ];
+
+    $json = json_encode($requestBody, JSON_UNESCAPED_UNICODE);
     if ($json === false) {
       return ['ok' => false, 'statusCode' => 0, 'responseBody' => '', 'errorMessage' => 'PAYLOAD_JSON_ERROR'];
     }
 
-    $headers = [
-      'Content-Type: application/json',
-      'Accept: application/json',
-    ];
-
-    $apiKey = trim((string)($this->cfg['api_key'] ?? ''));
-    if ($apiKey !== '') {
-      $headers[] = 'X-API-Key: ' . $apiKey;
-    }
-
-    $ch = curl_init($endpoint);
+    $ch = curl_init('https://go.botmaker.com/api/v1.0/intent/v2');
     curl_setopt_array($ch, [
       CURLOPT_POST => true,
-      CURLOPT_HTTPHEADER => $headers,
+      CURLOPT_HTTPHEADER => [
+        'Content-Type: application/json',
+        'Accept: application/json',
+        'access-token: ' . $accessToken,
+      ],
       CURLOPT_POSTFIELDS => $json,
       CURLOPT_RETURNTRANSFER => true,
       CURLOPT_TIMEOUT => $timeout,

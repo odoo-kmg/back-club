@@ -41,19 +41,17 @@ return [
     'botmaker' => '623cd39b8a1da51886cc8b9704b0230febdd232ecdba089ad153323aa35fabff',
   ],
 
-
-
   'notifications' => [
     'botmaker' => [
-      // Activar solo cuando Botmaker ya tenga listo el webhook/receptor de plantillas.
-      'enabled' => false,
-      'endpoint' => '',
-      'api_key' => '',
+      'enabled' => true,
+      'access_token' => 'eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJDb3Jwb3JhY2nDs24gS01HIGMuYS4iLCJidXNpbmVzc0lkIjoiY29ycG9yYWNpb25rbWdjYSIsIm5hbWUiOiJDb3Jwb3JhY2nDs24gS01HIGMuYS4iLCJhcGkiOnRydWUsImlkIjoiNkcwVFRFbXQ0S2RPanZxbDZ4Z2tsMGNTZ1lyMiIsImV4cCI6MTkzMTM4Njg0MiwianRpIjoiNkcwVFRFbXQ0S2RPanZxbDZ4Z2tsMGNTZ1lyMiJ9.NRLAYmjdbrnGRVUb7vonwx_OnhLEDcjga0wG4l2d_XthwLsQ3T1hj2vSGOO0VveParegEmfPmJcutz0IfpiMnw',
+      'chat_channel_number' => '584227837862',
+      'client_payload' => 'string',
       'timeout_seconds' => 10,
-      'assigned_template' => 'resultado_asignado',
-      'not_assigned_template' => 'resultado_no_asignado',
+      'assigned_template' => 'plantilla_club',
+      'not_assigned_template' => 'accion_asignado',
     ],
-  ],
+  ],  
 
   // Token para herramientas temporales (hash.php). Cambia y luego borras tools/hash.php
   'tools' => [
