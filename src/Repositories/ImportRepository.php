@@ -74,7 +74,7 @@ final class ImportRepository
   public function insertRow(array $row, int $actorUserId): void
   {
     $sql = "INSERT INTO file_import_row (
-              file_import_id, row_number, action_number,
+              file_import_id, `row_number`, action_number,
               scope_type, scope_draw_id,
               operation, reason,
               result_status, error_message,
@@ -108,7 +108,7 @@ final class ImportRepository
   public function insertShareholderRow(array $row, int $actorUserId): void
   {
     $sql = "INSERT INTO shareholder_import_row (
-              file_import_id, row_number, action_number,
+              file_import_id, `row_number`, action_number,
               document_type, document_number, document_key,
               first_name, last_name, phone_e164, email,
               operation, result_status, error_message,
@@ -156,12 +156,12 @@ final class ImportRepository
 
     $offset = ($page - 1) * $pageSize;
 
-    $sql = "SELECT id, file_import_id, row_number, action_number, scope_type, scope_draw_id,
+    $sql = "SELECT id, file_import_id, `row_number`, action_number, scope_type, scope_draw_id,
                    operation, reason, result_status, error_message,
                    created_at
             FROM file_import_row
             WHERE " . implode(' AND ', $where) . "
-            ORDER BY row_number ASC
+            ORDER BY `row_number` ASC
             LIMIT {$pageSize} OFFSET {$offset}";
     $st = $this->db->prepare($sql);
     $st->execute($vals);
@@ -181,14 +181,14 @@ final class ImportRepository
 
     $offset = ($page - 1) * $pageSize;
 
-    $sql = "SELECT id, file_import_id, row_number, action_number,
+    $sql = "SELECT id, file_import_id, `row_number`, action_number,
                    document_type, document_number, document_key,
                    first_name, last_name, phone_e164, email,
                    operation, result_status, error_message,
                    created_at
             FROM shareholder_import_row
             WHERE " . implode(' AND ', $where) . "
-            ORDER BY row_number ASC
+            ORDER BY `row_number` ASC
             LIMIT {$pageSize} OFFSET {$offset}";
     $st = $this->db->prepare($sql);
     $st->execute($vals);
