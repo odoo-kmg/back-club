@@ -36,6 +36,12 @@ return [
   'allowed_methods' => ['GET', 'POST', 'PATCH', 'OPTIONS'],
 ],
 
+  // Sorteos que permiten más de una persona registrada por la misma acción.
+  // En estos sorteos la unicidad de registro pasa a ser por persona/documento dentro del scope.
+  'registration' => [
+    'multi_participant_draw_ids' => [],
+  ],
+
   // API keys para integraciones externas (NO usar en el browser)
   'api_keys' => [
     'botmaker' => '623cd39b8a1da51886cc8b9704b0230febdd232ecdba089ad153323aa35fabff',

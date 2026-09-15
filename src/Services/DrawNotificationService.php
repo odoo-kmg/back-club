@@ -41,7 +41,7 @@ final class DrawNotificationService
         'actionNumber' => (string)$actionNumber,
         'winnerOrder' => (string)$winnerOrder,
       ],
-      sprintf('ASSIGNED:%d:%d:%d', (int)$draw['id'], $actionNumber, $winnerOrder),
+      $this->assignedIdempotencyKey((int)$draw['id'], $participantId, $actionNumber, $winnerOrder),
       $actorUserId
     );
   }
@@ -69,9 +69,36 @@ final class DrawNotificationService
         'drawName' => (string)($draw['name'] ?? ''),
         'actionNumber' => (string)$actionNumber,
       ],
-      sprintf('NOT_ASSIGNED:%d:%d', (int)$draw['id'], $actionNumber),
+      $this->notAssignedIdempotencyKey((int)$draw['id'], $participantId, $actionNumber),
       $actorUserId
     );
+  }
+
+  private function assignedIdempotencyKey(int $drawId, ?int $participantId, int $actionNumber, int $winnerOrder): string
+  {
+    if ($participantId !== null && $this->allowsMultipleParticipantsPerAction($drawId)) {
+      return sprintf('ASSIGNED:%d:P%d:%d:%d', $drawId, $participantId, $actionNumber, $winnerOrder);
+    }
+
+    return sprintf('ASSIGNED:%d:%d:%d', $drawId, $actionNumber, $winnerOrder);
+  }
+
+  private function notAssignedIdempotencyKey(int $drawId, ?int $participantId, int $actionNumber): string
+  {
+    if ($participantId !== null && $this->allowsMultipleParticipantsPerAction($drawId)) {
+      return sprintf('NOT_ASSIGNED:%d:P%d:%d', $drawId, $participantId, $actionNumber);
+    }
+
+    return sprintf('NOT_ASSIGNED:%d:%d', $drawId, $actionNumber);
+  }
+
+  private function allowsMultipleParticipantsPerAction(int $drawId): bool
+  {
+    $configuredIds = (array)($this->config['registration']['multi_participant_draw_ids'] ?? []);
+    foreach ($configuredIds as $configuredId) {
+      if ((int)$configuredId === $drawId) return true;
+    }
+    return false;
   }
 
   private function botmakerCfg(): array

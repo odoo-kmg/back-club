@@ -60,7 +60,7 @@ $eligibilityRangeController = new EligibilityRangeController($db);
 $exclusionController = new ExclusionController($db);
 
 // Fase 3
-$participantController = new ParticipantController($db);
+$participantController = new ParticipantController($db, $config);
 $actionBlockController = new ActionBlockController($db);
 $importController = new ImportController($db);
 $shareholderController = new ShareholderController($db);

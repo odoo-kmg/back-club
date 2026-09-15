@@ -368,9 +368,12 @@ final class ExecutionController
         );
 
         try {
-          $participant = (new \App\Repositories\DrawParticipantRepository($this->db))->getActiveByDrawAndAction($drawId, $picked);
-          if ($participant) {
-            (new DrawNotificationService($this->db, $this->config))->sendAssignedNotification($draw, $participant, $winnerOrder, $winnerId, $ctx->userId);
+          $participantRepo = new \App\Repositories\DrawParticipantRepository($this->db);
+          $participantsForAction = $participantRepo->listActiveByDrawAndAction($drawId, $picked);
+          $notificationService = new DrawNotificationService($this->db, $this->config);
+
+          foreach ($participantsForAction as $participant) {
+            $notificationService->sendAssignedNotification($draw, $participant, $winnerOrder, $winnerId, $ctx->userId);
           }
         } catch (\Throwable $notifyError) {
           // La notificación no puede romper la ejecución del sorteo manual.
@@ -427,7 +430,7 @@ final class ExecutionController
   /** @return array<int,int> */
   private function listActiveParticipantsActionNumbers(int $drawId): array
   {
-    $st = $this->db->prepare("SELECT action_number
+    $st = $this->db->prepare("SELECT DISTINCT action_number
                               FROM draw_participant
                               WHERE draw_id = ?
                                 AND inactive_at IS NULL

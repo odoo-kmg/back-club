@@ -16,7 +16,13 @@ use PDO;
 final class ParticipantController
 {
   private PDO $db;
-  public function __construct(PDO $db) { $this->db = $db; }
+  private array $config;
+
+  public function __construct(PDO $db, array $config = [])
+  {
+    $this->db = $db;
+    $this->config = $config;
+  }
 
   /**
    * Public (no-auth) registration endpoint.
@@ -149,9 +155,18 @@ final class ParticipantController
     }
 
     $scopeId = (int)$draw['participation_scope_id'];
+    $allowMultipleParticipantsPerAction = $this->allowsMultipleParticipantsPerAction($drawId);
+
+    if ($allowMultipleParticipantsPerAction && $documentKey === null) {
+      throw new HttpException(400, 'DOCUMENT_REQUIRED_MULTI_PARTICIPANT_DRAW', 'Documento requerido para este sorteo');
+    }
 
     $participantRepo = new DrawParticipantRepository($this->db);
-    if ($participantRepo->hasActiveParticipantInScope($scopeId, $actionNumber)) {
+    if ($allowMultipleParticipantsPerAction) {
+      if ($participantRepo->hasActiveParticipantDocumentInScope($scopeId, (string)$documentKey)) {
+        throw new HttpException(409, 'PERSON_ALREADY_PARTICIPATING_SCOPE', 'La persona ya participa en este scope');
+      }
+    } elseif ($participantRepo->hasActiveParticipantInScope($scopeId, $actionNumber)) {
       throw new HttpException(409, 'ACTION_ALREADY_PARTICIPATING_SCOPE', 'La acción ya participa en este scope');
     }
 
@@ -176,7 +191,11 @@ final class ParticipantController
       throw new HttpException(422, 'ACTION_BLOCKED', 'Acción no elegible (bloqueada)');
     }
 
-    if (in_array($channel, ['WEB','WHATSAPP'], true)) {
+    $mustValidateActionDocument = in_array($channel, ['WEB','WHATSAPP'], true)
+      || $allowMultipleParticipantsPerAction
+      || $documentKey !== null;
+
+    if ($mustValidateActionDocument) {
       $shareholderController = new ShareholderController($this->db);
       $shareholderController->validateActionDocumentMatch($actionNumber, (string)$normalizedDocumentType, (string)$normalizedDocumentNumber);
     }
@@ -266,6 +285,15 @@ final class ParticipantController
       'createdAt' => $r['created_at'],
       'updatedAt' => $r['updated_at'],
     ];
+  }
+
+  private function allowsMultipleParticipantsPerAction(int $drawId): bool
+  {
+    $configuredIds = (array)($this->config['registration']['multi_participant_draw_ids'] ?? []);
+    foreach ($configuredIds as $configuredId) {
+      if ((int)$configuredId === $drawId) return true;
+    }
+    return false;
   }
 
   private function toBool($v): bool

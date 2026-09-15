@@ -25,6 +25,19 @@ final class DrawParticipantRepository
     return (bool)$st->fetch();
   }
 
+  public function hasActiveParticipantDocumentInScope(int $scopeId, string $documentKey): bool
+  {
+    $sql = "SELECT id
+            FROM draw_participant
+            WHERE participation_scope_id = ?
+              AND document_key = ?
+              AND inactive_at IS NULL
+            LIMIT 1";
+    $st = $this->db->prepare($sql);
+    $st->execute([$scopeId, $documentKey]);
+    return (bool)$st->fetch();
+  }
+
   public function create(array $data, int $actorUserId): int
   {
     $sql = "INSERT INTO draw_participant (
@@ -106,6 +119,26 @@ final class DrawParticipantRepository
     $st->execute([$drawId, $actionNumber]);
     $row = $st->fetch();
     return $row ?: null;
+  }
+
+  /** @return array<int,array<string,mixed>> */
+  public function listActiveByDrawAndAction(int $drawId, int $actionNumber): array
+  {
+    $sql = "SELECT id, draw_id, participation_scope_id, action_number, channel, status,
+                   first_name, last_name, email, phone_e164,
+                   document_type, document_number, document_key,
+                   registered_at, registered_by_user_id,
+                   cancel_reason, canceled_by_user_id,
+                   active_from, inactive_at, created_at, updated_at
+            FROM draw_participant
+            WHERE draw_id = ?
+              AND action_number = ?
+              AND inactive_at IS NULL
+              AND status = 'ACTIVE'
+            ORDER BY id ASC";
+    $st = $this->db->prepare($sql);
+    $st->execute([$drawId, $actionNumber]);
+    return $st->fetchAll() ?: [];
   }
 
   /** @return array<int,array<string,mixed>> */
