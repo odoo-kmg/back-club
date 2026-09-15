@@ -215,6 +215,7 @@ final class ParticipantController
       'document_type' => $normalizedDocumentType,
       'document_number' => $normalizedDocumentNumber,
       'document_key' => $documentKey,
+      'uniqueness_mode' => $allowMultipleParticipantsPerAction ? 'DOCUMENT' : 'ACTION',
       'registered_at' => $now,
       'registered_by_user_id' => $registeredBy,
       'active_from' => $now,
