@@ -14,10 +14,12 @@ use PDO;
 final class BotmakerController
 {
   private PDO $db;
+  private array $config;
 
-  public function __construct(PDO $db)
+  public function __construct(PDO $db, array $config = [])
   {
     $this->db = $db;
+    $this->config = $config;
   }
 
   public function listDrawsForRegistration(Response $res): void
@@ -61,7 +63,7 @@ final class BotmakerController
 
   public function registerParticipant(int $drawId, int $serviceUserId, string $serviceUsername, Request $req, Response $res): void
   {
-    $participantController = new ParticipantController($this->db);
+    $participantController = new ParticipantController($this->db, $this->config);
     $participantController->registerMachine($drawId, $serviceUserId, $serviceUsername, 'WHATSAPP', $req, $res);
   }
 

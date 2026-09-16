@@ -69,7 +69,7 @@ $shareholderController = new ShareholderController($db);
 $executionController = new ExecutionController($db, $config);
 $winnerController = new WinnerController($db);
 $exportController = new ExportController($db);
-$botmakerController = new BotmakerController($db);
+$botmakerController = new BotmakerController($db, $config);
 $drawNotificationController = new DrawNotificationController($db, $config);
 
 // Public landing: service user resolution for audit fields.
