@@ -191,9 +191,12 @@ final class ParticipantController
       throw new HttpException(422, 'ACTION_BLOCKED', 'Acción no elegible (bloqueada)');
     }
 
-    $mustValidateActionDocument = in_array($channel, ['WEB','WHATSAPP'], true)
-      || $allowMultipleParticipantsPerAction
-      || $documentKey !== null;
+    // TEMPORAL: los sorteos configurados para múltiples participantes permiten invitados.
+    // Se mantiene la validación acción + cédula para todos los sorteos normales.
+    // En los sorteos multi-participante se conservan la elegibilidad de la acción, bloqueos,
+    // documento obligatorio y unicidad por documento, pero no se exige pertenencia a shareholder.
+    $mustValidateActionDocument = !$allowMultipleParticipantsPerAction
+      && (in_array($channel, ['WEB','WHATSAPP'], true) || $documentKey !== null);
 
     if ($mustValidateActionDocument) {
       $shareholderController = new ShareholderController($this->db);
